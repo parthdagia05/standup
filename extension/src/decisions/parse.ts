@@ -22,6 +22,22 @@ const NO = /\b(no|nope|don'?t|deny|reject|stop|skip|nahi)\b/;
  * options. Cheap rules first, then a small model. Returns null when unclear.
  */
 export async function matchOption(said: string, options: string[]): Promise<string | null> {
+  return matchByRules(said, options) ?? askModel(said, options);
+}
+
+/**
+ * A phone transcript: the first line that clearly picks an option wins (people
+ * answer, then chat). Falls back to the model reading the whole conversation.
+ */
+export async function matchFromConversation(userLines: string[], options: string[]): Promise<string | null> {
+  for (const line of userLines) {
+    const hit = matchByRules(line, options);
+    if (hit) return hit;
+  }
+  return askModel(userLines.join(" / "), options);
+}
+
+function matchByRules(said: string, options: string[]): string | null {
   const text = said.toLowerCase().replace(/[^\w\s']/g, " ");
 
   // An option's distinctive words appearing in the answer is the strongest signal.
@@ -45,7 +61,7 @@ export async function matchOption(said: string, options: string[]): Promise<stri
     if (n && !y) return noOpt;
   }
 
-  return askModel(said, options);
+  return null;
 }
 
 async function askModel(said: string, options: string[]): Promise<string | null> {

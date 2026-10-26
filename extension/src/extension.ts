@@ -36,7 +36,7 @@ export function activate(context: vscode.ExtensionContext): void {
     if (pick) decisions.answer(e.id, pick, "click");
   });
 
-  phone.onAnswer = (id, said) => void decisions.answerFromSpeech(id, said, "phone");
+  phone.onAnswer = (id, lines) => void decisions.answerFromCall(id, lines);
   server = startServer(config.serverPort());
 
   const status = (): Record<string, string> => ({

@@ -22,8 +22,8 @@ class Phone {
   private queue: Decision[] = [];
   private active: ActiveCall | null = null;
   private timer: NodeJS.Timeout | null = null;
-  /** Late-bound to avoid an import cycle with the router. */
-  onAnswer: (decisionId: string, said: string) => void = () => {};
+  /** Late-bound to avoid an import cycle with the router. Gets every user line from the call. */
+  onAnswer: (decisionId: string, userLines: string[]) => void = () => {};
 
   static configured(): { ok: boolean; why?: string } {
     if (!secret("BOLNA_API_KEY")) return { ok: false, why: "BOLNA_API_KEY is not set" };
@@ -112,8 +112,8 @@ class Phone {
       const status = String(ex.status ?? "").toLowerCase();
       if (["completed", "call-disconnected", "failed", "no-answer", "busy", "canceled", "error"].includes(status)) {
         const extracted = ex.extracted_data?.choice ?? ex.extracted_data?.decision;
-        const said = typeof extracted === "string" && extracted ? extracted : lastUserTurn(ex.transcript);
-        if (said) this.onAnswer(call.decisionId, said);
+        const lines = typeof extracted === "string" && extracted ? [extracted] : userLines(ex.transcript);
+        if (lines.length) this.onAnswer(call.decisionId, lines);
         else bus.emit({ type: "phone.status", status: `call ended (${status}) without an answer`, decisionId: call.decisionId });
         if (this.active === call) this.finish();
       }
@@ -123,10 +123,14 @@ class Phone {
   }
 }
 
-function lastUserTurn(transcript: unknown): string {
-  if (typeof transcript !== "string") return "";
-  const userLines = transcript.split("\n").filter((l) => /^\s*user\s*:/i.test(l));
-  return userLines.slice(-2).join(" ").replace(/user\s*:/gi, "").trim();
+/** What the caller said, in order. The answer is usually early; the end is "bye". */
+function userLines(transcript: unknown): string[] {
+  if (typeof transcript !== "string") return [];
+  return transcript
+    .split("\n")
+    .filter((l) => /^\s*user\s*:/i.test(l))
+    .map((l) => l.replace(/^\s*user\s*:/i, "").trim())
+    .filter(Boolean);
 }
 
 export const phone = new Phone();

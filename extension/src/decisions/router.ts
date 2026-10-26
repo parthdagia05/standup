@@ -1,7 +1,7 @@
 import { AgentName, AnswerVia, bus, DecisionReason } from "../bus";
 import { speech } from "../voice/tts";
 import { agentLabel } from "../voice/voices";
-import { matchOption } from "./parse";
+import { matchFromConversation, matchOption } from "./parse";
 import { phone } from "./phone";
 
 export interface Decision {
@@ -53,6 +53,16 @@ class DecisionRouter {
     const choice = await matchOption(said, d.options);
     if (choice) return this.answer(id, choice, via);
     if (via === "voice") speech.say(d.agent, `Sorry, I didn't catch that. ${spokenOptions(d.options)}`, true);
+    return false;
+  }
+
+  /** A finished phone call's transcript → option. */
+  async answerFromCall(id: string, userLines: string[]): Promise<boolean> {
+    const d = this.pending.get(id);
+    if (!d) return false;
+    const choice = await matchFromConversation(userLines, d.options);
+    if (choice) return this.answer(id, choice, "phone");
+    bus.emit({ type: "phone.status", status: "couldn't tell your answer from the call; answer in the panel", decisionId: id });
     return false;
   }
 
