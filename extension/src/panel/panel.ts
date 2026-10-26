@@ -5,14 +5,12 @@ import { team } from "../voice/voices";
 
 export interface PanelActions {
   start(feature: string): void;
-  /** Typed text from the message box: a new feature when idle, a note to the team mid-run. */
-  say(text: string): void;
   pushToTalk(): void;
   stop(): void;
   status(): Record<string, string>;
 }
 
-/** The standup call: who's on it, what they're saying, and what they need from you. */
+/** The webview: agent cards, live transcript, decision log, Desk/Away. */
 export class StandupPanel {
   private static current: StandupPanel | undefined;
   private disposables: vscode.Disposable[] = [];
@@ -51,9 +49,6 @@ export class StandupPanel {
             break;
           case "start":
             this.actions.start(String(msg.text ?? ""));
-            break;
-          case "say":
-            this.actions.say(String(msg.text ?? ""));
             break;
           case "answer":
             decisions.answer(String(msg.id), String(msg.choice), "click");
@@ -97,43 +92,37 @@ export class StandupPanel {
 <title>Standup</title>
 </head>
 <body>
-<div class="app">
-  <header class="head">
-    <div class="title-block">
-      <h1 id="title">Standup</h1>
-      <p id="meta" class="meta">No call in progress</p>
+<header>
+  <div class="brand"><span class="logo">●</span> Standup <span id="runState" class="run-state">idle</span></div>
+  <div class="controls">
+    <div class="mode" role="group" aria-label="Where are you">
+      <button id="modeDesk" class="seg on" title="Decisions are spoken here">🎙 Desk</button>
+      <button id="modeAway" class="seg" title="Decisions come as a phone call">📞 Away</button>
     </div>
-    <div class="head-actions">
-      <div class="seg" role="radiogroup" aria-label="Where questions reach you">
-        <button id="modeDesk" role="radio" aria-checked="true">At my desk</button>
-        <button id="modeAway" role="radio" aria-checked="false">Away, call me</button>
-      </div>
-      <button id="stop" class="btn-quiet" disabled>End standup</button>
-    </div>
-  </header>
-
-  <div id="timeline" class="timeline" aria-label="Who spoke when" hidden></div>
-
-  <div class="body">
-    <aside class="roster" aria-label="On the call">
-      <h2 class="section-label">On the call</h2>
-      <ul id="people" class="people"></ul>
-      <dl id="systems" class="systems"></dl>
-    </aside>
-
-    <main class="thread-col">
-      <div id="pinned" class="pinned" hidden></div>
-      <div id="thread" class="thread" aria-live="polite"></div>
-      <form id="composer" class="composer">
-        <button type="button" id="ptt" class="mic" title="Talk (⌘⇧Space)" aria-label="Talk to the team" aria-pressed="false">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5"/><path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2"/></svg>
-        </button>
-        <input id="input" autocomplete="off" aria-label="Message">
-        <button type="submit" id="send" class="btn-primary">Start standup</button>
-      </form>
-    </main>
+    <button id="ptt" class="ptt" title="Push to talk (⌘⇧Space)">🎙 Talk <kbd>⌘⇧Space</kbd></button>
+    <button id="stop" class="ghost" title="Stop all agents">Stop</button>
   </div>
-</div>
+</header>
+
+<form id="startForm" class="start">
+  <input id="feature" placeholder="Say or type a feature, e.g. Add pagination and search to todos" autocomplete="off">
+  <button type="submit">Start</button>
+</form>
+
+<section id="cards" class="cards"></section>
+
+<main class="grid">
+  <section class="col">
+    <h2>Transcript</h2>
+    <div id="transcript" class="transcript"><p class="empty">Nothing yet. Start a feature to hear the team.</p></div>
+  </section>
+  <section class="col">
+    <h2>Decisions <span id="pendingCount" class="count"></span></h2>
+    <div id="decisions" class="decisions"><p class="empty">The team will ask you here only when it matters.</p></div>
+    <h2 class="sub">Status</h2>
+    <ul id="status" class="status"></ul>
+  </section>
+</main>
 <script nonce="${nonce}" src="${media("panel.js")}"></script>
 </body>
 </html>`;
