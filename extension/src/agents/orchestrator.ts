@@ -5,29 +5,32 @@ import { AgentName, bus } from "../bus";
 import { config } from "../config";
 import { decisions } from "../decisions/router";
 import { speech } from "../voice/tts";
-import { agentLabel } from "../voice/voices";
+import { agentLabel, announceTeam, team } from "../voice/voices";
 import { permissionsFor } from "./permissions";
-import { folderPrompt, leadPrompt, summaryPrompt } from "./prompts";
+import { leadPrompt, summaryPrompt, workerPrompt } from "./prompts";
 import { agentEnv, authMode, loadSdk } from "./sdk";
-import { buildTools, FolderAgent, TeamContext } from "./tools";
+import { buildTools, HireSpec, TeamContext } from "./tools";
 
 const READ_TOOLS = ["Read", "Grep", "Glob"];
-const FOLDER_TOOLS = [...READ_TOOLS, "Write", "Edit", "Bash"];
+const WORKER_TOOLS = [...READ_TOOLS, "Write", "Edit", "Bash"];
 const MAX_TEAMMATE_REQUESTS = 3;
+const RESERVED_IDS = new Set(["lead", "team", "you", "developer"]);
 
 /**
- * Runs one feature end to end: the lead plans, backend and frontend build in
- * parallel, tests go last, then the lead reads out a summary.
+ * Runs one feature end to end: the Lead reads the repo and hires a team that
+ * fits it, teammates start as soon as their dependencies finish, then the Lead
+ * reads out a summary.
  */
 export class Orchestrator implements TeamContext {
   private sdk!: typeof Sdk;
   private repo = "";
   private feature = "";
   private abort = new AbortController();
-  private running = new Map<FolderAgent, Promise<string>>();
-  private pendingTests: string | null = null;
+  private running = new Map<AgentName, Promise<string>>();
+  /** One promise per hired teammate, resolved when its scheduled task is done. */
+  private scheduled: Promise<unknown>[] = [];
   private results: string[] = [];
-  private contract: string | null = null;
+  private contracts: string[] = [];
   private contractWaiters: ((c: string) => void)[] = [];
   private inbox = new Map<AgentName, string[]>();
   /** Agents blocked in wait_for_contract, woken when someone talks to them. */
@@ -40,28 +43,28 @@ export class Orchestrator implements TeamContext {
   async run(feature: string): Promise<void> {
     if (this.active) throw new Error("A run is already in progress");
     const repo = config.repoPath();
-    if (!repo) throw new Error("Open the demo repo as your workspace folder, or set standup.repoPath");
+    if (!repo) throw new Error("Open the repo you want to work on as your workspace folder, or set standup.repoPath");
     this.reset(repo, feature);
     this.active = true;
     bus.emit({ type: "run.started", feature });
+    announceTeam();
     bus.emit({ type: "log", level: "info", text: `Run started in ${repo} (auth: ${authMode()}, model: ${config.model()})` });
     let ok = true;
     let summary: string | undefined;
     try {
       this.sdk = await loadSdk();
-      await this.runAgent("lead", `The developer wants: "${feature}". Plan it as described in your instructions.`);
-      await Promise.all(this.running.values());
-      if (this.pendingTests !== null && !this.abort.signal.aborted) {
-        const task = this.pendingTests;
-        this.pendingTests = null;
-        await this.startFolder("tests", task);
+      await this.runAgent("lead", `The developer wants: "${feature}". Work through your instructions: understand the repo, ask your one question, hire the team, kick them off.`);
+      if (team.workers().length === 0) {
+        speech.say("lead", "I couldn't put a team together for that one. Try describing the feature a bit differently?", true);
+        ok = false;
+        return;
       }
+      await Promise.all(this.scheduled);
       if (!this.abort.signal.aborted) summary = await this.summarize();
     } catch (err) {
       ok = false;
-      const msg = (err as Error).message;
       if (!this.abort.signal.aborted) {
-        bus.emit({ type: "log", level: "error", text: `Run failed: ${msg}` });
+        bus.emit({ type: "log", level: "error", text: `Run failed: ${(err as Error).message}` });
         speech.say("lead", "Something went wrong. Check the Standup output for details.", true);
       }
     } finally {
@@ -78,32 +81,58 @@ export class Orchestrator implements TeamContext {
 
   /** Something the developer said while agents were busy. */
   addNote(text: string): void {
-    for (const a of ["lead", "frontend", "backend", "tests"] as AgentName[]) this.deliver(a, `The developer says: "${text}"`);
+    for (const m of team.all()) this.deliver(m.id, `The developer says: "${text}"`);
   }
 
   // ---- TeamContext, used by the custom tools ----
 
-  assignTask(agent: FolderAgent, task: string): void {
-    bus.emit({ type: "agent.message", from: "lead", to: agent, text: task });
-    // Tests wait until the code they test is written.
-    if (agent === "tests") this.pendingTests = task;
-    else if (!this.running.has(agent)) void this.startFolder(agent, task);
+  formTeam(specs: HireSpec[]): string | null {
+    if (team.workers().length) return "The team is already hired.";
+    const error = validateTeam(specs, this.repo);
+    if (error) return error;
+
+    const ids = new Set<string>();
+    const hired: HireSpec[] = specs.map((s) => {
+      // Dependencies only point backwards, so there are no cycles.
+      let after = (s.after ?? []).map((a) => a.toLowerCase()).filter((a) => ids.has(a));
+      if (s.kind === "tests" && after.length === 0) after = [...ids].filter((id) => specs.find((x) => x.id.toLowerCase() === id)?.kind !== "tests");
+      // .standup is shared scratch space; nobody needs to own it.
+      const owns = s.owns.map(normalizeOwn).filter((p) => p !== ".standup");
+      const spec = { ...s, id: s.id.toLowerCase(), owns: owns.length ? owns : s.owns.map(normalizeOwn), after };
+      ids.add(spec.id);
+      return spec;
+    });
+
+    for (const s of hired) team.add(s);
+    announceTeam();
+
+    const finished = new Map<string, Promise<unknown>>();
+    for (const s of hired) {
+      bus.emit({ type: "agent.message", from: "lead", to: s.id, text: s.task });
+      if (s.after.length) bus.emit({ type: "agent.status", agent: s.id, status: "idle", detail: `waiting for ${s.after.map(agentLabel).join(", ")}` });
+      const p = Promise.all(s.after.map((d) => finished.get(d))).then(() => (this.abort.signal.aborted ? "" : this.startWorker(s.id, s.task)));
+      finished.set(s.id, p);
+      this.scheduled.push(p);
+    }
+    bus.emit({ type: "log", level: "info", text: `Hired: ${hired.map((s) => `${s.label} (${s.kind}, owns ${s.owns.join(", ")}${s.after.length ? `, after ${s.after.join(", ")}` : ""})`).join("; ")}` });
+    return null;
   }
 
   publishContract(from: AgentName, contract: string): void {
-    this.contract = contract;
+    this.contracts.push(`From ${agentLabel(from)}:\n${contract}`);
     const file = path.join(this.repo, ".standup", "contracts.md");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.appendFileSync(file, `\n## ${new Date().toLocaleTimeString()} — from ${agentLabel(from)}\n\n${contract}\n`);
-    bus.emit({ type: "agent.message", from, to: "frontend", text: `API contract: ${contract}` });
+    bus.emit({ type: "agent.message", from, to: "team", text: `Contract: ${contract}` });
     bus.emit({ type: "file.changed", agent: from, path: ".standup/contracts.md" });
-    this.contractWaiters.splice(0).forEach((w) => w(contract));
+    const all = this.contracts.join("\n\n");
+    this.contractWaiters.splice(0).forEach((w) => w(all));
   }
 
   waitForContract(agent: AgentName, timeoutMs: number): Promise<{ contract?: string; messages?: string[] }> {
-    if (this.contract) return Promise.resolve({ contract: this.contract });
     const unread = this.takeInbox(agent);
     if (unread.length) return Promise.resolve({ messages: unread });
+    if (this.contracts.length) return Promise.resolve({ contract: this.contracts.join("\n\n") });
     return new Promise((resolve) => {
       let done = false;
       const finish = (r: { contract?: string; messages?: string[] }) => {
@@ -146,17 +175,17 @@ export class Orchestrator implements TeamContext {
     });
   }
 
-  async askTeammate(from: AgentName, to: FolderAgent, request: string): Promise<string> {
+  async askTeammate(from: AgentName, to: AgentName, request: string): Promise<string> {
     if (++this.teammateRequests > MAX_TEAMMATE_REQUESTS) return "Too many cross-team requests this run. Work with what you have.";
     bus.emit({ type: "agent.message", from, to, text: request });
     await this.running.get(to)?.catch(() => {});
     const made = this.decisionLog();
     const guard = made.length ? `\n\nThe developer already decided the following. These are final; do not change them:\n${made.join("\n")}` : "";
-    const result = await this.startFolder(
+    const result = await this.startWorker(
       to,
       `${agentLabel(from)} asks: ${request}${guard}\n\nMake only this change, then reply in one or two sentences saying what you did.`,
     );
-    bus.emit({ type: "agent.message", from: to, to: from as AgentName, text: result });
+    bus.emit({ type: "agent.message", from: to, to: from, text: result });
     return `${agentLabel(to)} replied: ${result}`;
   }
 
@@ -183,18 +212,19 @@ export class Orchestrator implements TeamContext {
     this.feature = feature;
     this.abort = new AbortController();
     this.running.clear();
-    this.pendingTests = null;
+    this.scheduled = [];
     this.results = [];
-    this.contract = null;
+    this.contracts = [];
     this.contractWaiters = [];
     this.inbox.clear();
     this.inboxWaiters.clear();
     this.replyWaiters.clear();
     this.teammateRequests = 0;
+    team.reset();
     speech.resetIntroductions();
   }
 
-  private startFolder(agent: FolderAgent, task: string): Promise<string> {
+  private startWorker(agent: AgentName, task: string): Promise<string> {
     const p = this.runAgent(agent, task).finally(() => {
       if (this.running.get(agent) === p) this.running.delete(agent);
     });
@@ -206,6 +236,8 @@ export class Orchestrator implements TeamContext {
     const { query } = this.sdk;
     const { server, names } = buildTools(this.sdk, agent, this);
     const isLead = agent === "lead";
+    const member = team.get(agent);
+    if (!member) throw new Error(`Unknown teammate ${agent}`);
     bus.emit({ type: "agent.status", agent, status: "thinking" });
 
     const q = query({
@@ -214,15 +246,15 @@ export class Orchestrator implements TeamContext {
         cwd: this.repo,
         model: isLead ? config.leadModel() : config.model(),
         effort: isLead ? "medium" : "low",
-        systemPrompt: { type: "preset", preset: "claude_code", append: isLead ? leadPrompt() : folderPrompt(agent as FolderAgent) },
-        tools: isLead ? READ_TOOLS : FOLDER_TOOLS,
+        systemPrompt: { type: "preset", preset: "claude_code", append: isLead ? leadPrompt() : workerPrompt(member) },
+        tools: isLead ? READ_TOOLS : WORKER_TOOLS,
         // Built-in tools all go through canUseTool so reads outside the repo get caught.
         allowedTools: names,
         mcpServers: { standup: server },
         canUseTool: permissionsFor(agent, this.repo),
         permissionMode: "default",
         settingSources: [],
-        maxTurns: isLead ? 15 : 40,
+        maxTurns: isLead ? 20 : 60,
         abortController: this.abort,
         env: agentEnv(),
       },
@@ -306,4 +338,36 @@ export class Orchestrator implements TeamContext {
     bus.emit({ type: "agent.status", agent: "lead", status: "done" });
     return summary;
   }
+}
+
+function normalizeOwn(p: string): string {
+  const n = p.trim().replace(/^\.\/+/, "").replace(/\/+$/, "");
+  return n === "" ? "." : n;
+}
+
+/** Returns a message the Lead can act on, or null when the team is valid. */
+function validateTeam(specs: HireSpec[], repo: string): string | null {
+  const ids = new Set<string>();
+  const labels = new Set<string>();
+  const claims: { id: string; path: string }[] = [];
+  for (const s of specs) {
+    const id = s.id.toLowerCase();
+    if (!/^[a-z][a-z0-9-]{0,15}$/.test(id)) return `"${s.id}" isn't a valid id; use a short lowercase word like "api".`;
+    if (RESERVED_IDS.has(id) || ids.has(id)) return `The id "${s.id}" is taken.`;
+    if (labels.has(s.label.toLowerCase())) return `Two teammates are called ${s.label}.`;
+    ids.add(id);
+    labels.add(s.label.toLowerCase());
+    for (const raw of s.owns) {
+      const p = normalizeOwn(raw);
+      if (path.isAbsolute(p) || p.split("/").includes("..")) return `${s.label} can only own paths inside the repo, not "${raw}".`;
+      if (p === "." && specs.length > 1) return `Only a single fullstack teammate may own the whole repo (".").`;
+      if (p !== "." && !fs.existsSync(path.join(repo, p)) && !fs.existsSync(path.join(repo, path.dirname(p)))) {
+        return `"${raw}" doesn't exist in the repo. Use real paths from the repo.`;
+      }
+      const clash = claims.find((c) => c.path === p || c.path.startsWith(p + "/") || p.startsWith(c.path + "/"));
+      if (clash && clash.id !== id) return `${s.label} and ${agentLabel(clash.id) || clash.id} both own "${p}". Ownership can't overlap.`;
+      claims.push({ id, path: p });
+    }
+  }
+  return null;
 }

@@ -4,9 +4,8 @@ import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sd
 import { AgentName, bus, DecisionReason } from "../bus";
 import { decisions } from "../decisions/router";
 import { speech } from "../voice/tts";
-import { agentLabel } from "../voice/voices";
+import { agentLabel, team } from "../voice/voices";
 import { checkPackages, packagesIn } from "./packageSafety";
-import { FOLDERS } from "./prompts";
 
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 const READ_TOOLS = new Set(["Read", "Grep", "Glob", "LS"]);
@@ -47,9 +46,14 @@ export function permissionsFor(agent: AgentName, repoRoot: string): CanUseTool {
     if (WRITE_TOOLS.has(toolName)) {
       if (agent === "lead") return deny("The lead plans and assigns; it never edits files.");
       const abs = resolve(repo, String(input.file_path ?? input.notebook_path ?? ""));
-      const owned = [path.join(repo, FOLDERS[agent]), path.join(repo, ".standup")];
+      const owns = team.get(agent)?.owns ?? [];
+      const owned = [...owns.map((p) => path.join(repo, p)), path.join(repo, ".standup")];
       if (owned.some((dir) => abs === dir || abs.startsWith(dir + path.sep))) return allow(input);
-      return deny(`You own ${FOLDERS[agent]}/ only, so you can't edit ${display(repo, abs)}. Ask the owner instead.`);
+      const owner = team.workers().find((m) => m.owns.some((p) => abs === path.join(repo, p) || abs.startsWith(path.join(repo, p) + path.sep)));
+      return deny(
+        `You own ${owns.join(", ") || "nothing"}, so you can't edit ${display(repo, abs)}.` +
+          (owner ? ` ${owner.label} owns it; ask them with say_to.` : " Nobody owns it; mention it to the developer if it really needs changing."),
+      );
     }
 
     if (READ_TOOLS.has(toolName)) {

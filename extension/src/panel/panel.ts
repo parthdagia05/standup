@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import { AGENTS, bus, BusEvent } from "../bus";
+import { bus, BusEvent } from "../bus";
 import { decisions } from "../decisions/router";
-import { voiceFor } from "../voice/voices";
+import { team } from "../voice/voices";
 
 export interface PanelActions {
   start(feature: string): void;
@@ -41,7 +41,7 @@ export class StandupPanel {
           case "ready":
             this.post({
               type: "init",
-              agents: AGENTS.map((a) => ({ id: a, ...voiceFor(a) })),
+              agents: team.info(),
               mode: decisions.mode,
               status: this.actions.status(),
               history: bus.history as BusEvent[],

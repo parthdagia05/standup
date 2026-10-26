@@ -11,6 +11,8 @@ export interface Decision {
   options: string[];
   reason: DecisionReason;
   resolve: (choice: string) => void;
+  /** Teammates who asked the same thing while this was pending; they get the same answer. */
+  followers: { agent: AgentName; resolve: (choice: string) => void }[];
 }
 
 let counter = 0;
@@ -24,9 +26,20 @@ class DecisionRouter {
   private pending = new Map<string, Decision>();
 
   request(agent: AgentName, question: string, options: string[], reason: DecisionReason = "other"): Promise<string> {
+    // Both sides of an interface disagreement tend to escalate at once; ask the developer once.
+    const twin = reason === "contract" ? [...this.pending.values()].find((d) => d.reason === "contract" && d.agent !== agent) : undefined;
+    if (twin) {
+      bus.emit({ type: "agent.status", agent, status: "waiting", detail: `same question as ${agentLabel(twin.agent)}` });
+      return new Promise<string>((resolve) =>
+        twin.followers.push({
+          agent,
+          resolve: (choice) => resolve(`${choice} (the developer answered ${agentLabel(twin.agent)}'s version of this question: "${twin.question}")`),
+        }),
+      );
+    }
     const id = `d_${++counter}`;
     return new Promise<string>((resolve) => {
-      const decision: Decision = { id, agent, question, options, reason, resolve };
+      const decision: Decision = { id, agent, question, options, reason, resolve, followers: [] };
       this.pending.set(id, decision);
       bus.emit({ type: "decision.requested", id, agent, question, options, reason });
       bus.emit({ type: "agent.status", agent, status: "waiting", detail: question });
@@ -43,6 +56,10 @@ class DecisionRouter {
     bus.emit({ type: "decision.answered", id, choice, via });
     bus.emit({ type: "agent.status", agent: d.agent, status: "working" });
     d.resolve(choice);
+    for (const f of d.followers) {
+      bus.emit({ type: "agent.status", agent: f.agent, status: "working" });
+      f.resolve(choice);
+    }
     return true;
   }
 
@@ -93,7 +110,10 @@ class DecisionRouter {
 
   /** Unblocks every waiting agent with a denial (used by Stop). */
   cancelAll(): void {
-    for (const d of this.pending.values()) d.resolve("CANCELLED: the run was stopped");
+    for (const d of this.pending.values()) {
+      d.resolve("CANCELLED: the run was stopped");
+      d.followers.forEach((f) => f.resolve("CANCELLED: the run was stopped"));
+    }
     this.pending.clear();
     phone.cancelQueued();
   }

@@ -1,7 +1,19 @@
 import { EventEmitter } from "node:events";
 
-export type AgentName = "lead" | "frontend" | "backend" | "tests";
-export const AGENTS: AgentName[] = ["lead", "frontend", "backend", "tests"];
+/** "lead", or an id the Lead chose when hiring ("api", "web", "db", "tests"…). */
+export type AgentName = string;
+
+export type MemberKind = "lead" | "frontend" | "backend" | "database" | "tests" | "mobile" | "infra" | "docs" | "fullstack" | "other";
+export const WORKER_KINDS = ["frontend", "backend", "database", "tests", "mobile", "infra", "docs", "fullstack", "other"] as const;
+
+export interface MemberInfo {
+  id: AgentName;
+  label: string;
+  kind: MemberKind;
+  /** Repo-relative paths this teammate may edit. */
+  owns: string[];
+  color: string;
+}
 
 export type DecisionReason = "package" | "schema" | "contract" | "test" | "destructive" | "access" | "other";
 export type AnswerVia = "voice" | "phone" | "click";
@@ -19,6 +31,7 @@ export type BusEvent =
   | { type: "speaking"; agent: AgentName | null }
   | { type: "listening"; on: boolean }
   | { type: "phone.status"; status: string; decisionId?: string }
+  | { type: "team.formed"; members: MemberInfo[] }
   | { type: "run.started"; feature: string }
   | { type: "run.finished"; ok: boolean; summary?: string }
   | { type: "log"; level: "info" | "warn" | "error"; text: string };
