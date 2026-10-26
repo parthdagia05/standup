@@ -1,0 +1,113 @@
+{
+  "name": "standup",
+  "displayName": "Standup",
+  "description": "Your codebase's folders are voice agents. They build in parallel and call you only when a real decision is needed.",
+  "version": "0.1.0",
+  "publisher": "standup",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "standup.openPanel",
+        "title": "Standup: Open Panel"
+      },
+      {
+        "command": "standup.start",
+        "title": "Standup: Start a Feature"
+      },
+      {
+        "command": "standup.pushToTalk",
+        "title": "Standup: Push to Talk"
+      },
+      {
+        "command": "standup.toggleAway",
+        "title": "Standup: Toggle Desk / Away"
+      },
+      {
+        "command": "standup.stop",
+        "title": "Standup: Stop All Agents"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "standup.pushToTalk",
+        "key": "cmd+shift+space",
+        "mac": "cmd+shift+space",
+        "win": "ctrl+shift+space",
+        "linux": "ctrl+shift+space"
+      }
+    ],
+    "configuration": {
+      "title": "Standup",
+      "properties": {
+        "standup.repoPath": {
+          "type": "string",
+          "default": "",
+          "description": "Repo the agents work on. Empty means the first workspace folder."
+        },
+        "standup.model": {
+          "type": "string",
+          "default": "claude-sonnet-5-5",
+          "description": "Model for the folder agents. Use claude-opus-5-5 for the real demo."
+        },
+        "standup.leadModel": {
+          "type": "string",
+          "default": "claude-sonnet-5-5",
+          "description": "Model for the lead agent."
+        },
+        "standup.parseModel": {
+          "type": "string",
+          "default": "claude-haiku-5-5",
+          "description": "Small model that maps spoken answers to decision options."
+        },
+        "standup.voice": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "cartesia",
+            "say",
+            "off"
+          ],
+          "default": "auto",
+          "description": "auto uses Cartesia when CARTESIA_API_KEY is set, otherwise macOS 'say'."
+        },
+        "standup.phoneNumber": {
+          "type": "string",
+          "default": "",
+          "description": "Your phone number for Away mode, e.g. +919876543210. Overrides STANDUP_PHONE in .env."
+        },
+        "standup.serverPort": {
+          "type": "number",
+          "default": 7777,
+          "description": "Port for the local server Bolna calls back to."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.310",
+    "express": "^5.3.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "@types/vscode": "~1.95.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}
