@@ -19,12 +19,12 @@ const LEAD: Member = {
   role: "Plans the work, hires the team and wraps up",
   owns: [],
   after: [],
-  color: "#f2b84b",
+  color: "#b4761c",
   sayVoice: "Samantha",
 };
 
-// Distinct, readable on dark backgrounds, and distinct from the Lead's amber.
-const COLORS = ["#4f9dff", "#3ddc97", "#ff6b9a", "#a78bfa", "#ff9f43", "#22d3ee"];
+// Avatar fills with white initials: mid-tone so they hold up on light and dark themes.
+const COLORS = ["#2f6fd0", "#24865c", "#b8406f", "#6b55c9", "#c0612a", "#1b8592"];
 const SAY_VOICES = ["Daniel", "Rishi", "Karen", "Moira", "Tessa", "Fred"];
 
 /** The team for the current run. Starts as just the Lead, who hires the rest. */

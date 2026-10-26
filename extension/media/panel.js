@@ -1,31 +1,42 @@
 // @ts-check
-// Mission Control: renders the team on an SVG stage and keeps the decision
-// dock and live feed in sync with bus events from the extension.
+// The standup call view: roster, conversation thread, call timeline and the
+// questions waiting on the developer, all driven by bus events.
 const vscode = acquireVsCodeApi();
 const $ = (id) => /** @type {HTMLElement} */ (document.getElementById(id));
-const SVG = "http://www.w3.org/2000/svg";
-const CX = 400;
-const CY = 262;
+
+const SUGGESTIONS = [
+  "Add pagination and search to todos",
+  "Let users mark a todo as done and delete todos",
+  "Add a quote of the day shown at the top of the page",
+];
+const VIA = { voice: "answered by voice", phone: "answered on the phone", click: "clicked" };
 
 /** @type {Map<string, {id:string,label:string,kind:string,color:string,owns:string[]}>} */
 const agents = new Map();
-/** @type {Map<string, {x:number,y:number}>} */
-const pos = new Map();
-const status = new Map();
+/** @type {Map<string, {status:string, detail?:string, files:string[]}>} */
+const people = new Map();
 /** @type {Map<string, any>} */
-const decisions = new Map();
-const bubbleTimers = new Map();
-let runStart = 0;
-let clockTimer = 0;
+const asks = new Map();
+/** @type {{agent:string, t:number, peer:boolean}[]} */
+let ticks = [];
+/** @type {{id:string, t:number}[]} */
+let marks = [];
 let speaking = null;
-
-const VIA = { voice: "🎙 voice", phone: "📞 phone", click: "🖱 click" };
+let runStart = 0;
+let runEnd = 0;
+let live = false;
+let clock = 0;
+/** @type {{key:string, el:HTMLElement, lines:HTMLElement, at:number}|null} */
+let lastGroup = null;
+/** @type {{el:HTMLElement, done:Set<string>}|null} */
+let assignBlock = null;
 
 window.addEventListener("message", ({ data }) => {
   if (data.type === "init") {
-    setTeam(data.agents, true);
+    setTeam(data.agents);
     setMode(data.mode);
     renderSystems(data.status);
+    showEmpty();
     for (const e of data.history) handle(e, true);
   } else if (data.type === "event") handle(data.event, false);
 });
@@ -34,478 +45,585 @@ window.addEventListener("message", ({ data }) => {
 function handle(e, replay) {
   switch (e.type) {
     case "run.started":
-      resetRun(e.feature, replay ? Date.now() : Date.now());
-      feed({ from: "you", text: e.feature, kind: "you" });
+      startRun(e.feature);
       break;
     case "team.formed":
-      setTeam(e.members, replay);
+      setTeam(e.members);
+      if (e.members.length > 1) teamNote(e.members);
       break;
     case "speak":
-      feed({ from: e.agent, to: "you", text: e.text });
-      if (!replay) bubble(e.agent, e.text);
+      say(e.agent, e.text);
+      tick(e.agent, false);
       break;
     case "user.said":
-      feed({ from: "you", text: e.text, kind: "you" });
+      // When idle, what you say starts the run, and the run opens with it.
+      if (live) say("you", e.text);
       break;
     case "agent.message":
-      feed({ from: e.from, to: e.to, text: e.text, kind: "msg" });
-      if (!replay) {
-        beam(e.from, e.to);
-        if (e.text.length < 220 && !e.text.startsWith("Contract:")) bubble(e.from, e.text, e.to);
-      }
+      message(e);
       break;
     case "decision.requested":
-      addDecision(e);
+      ask(e);
       break;
     case "decision.answered":
-      answerDecision(e);
+      answered(e);
       break;
     case "agent.status":
       setStatus(e.agent, e.status, e.detail);
       break;
     case "file.changed":
-      if (!replay) chip(e.agent, e.path);
+      fileChanged(e.agent, e.path);
       break;
     case "speaking":
       speaking = e.agent;
-      document.querySelectorAll(".node").forEach((n) => n.classList.toggle("speaking", n.getAttribute("data-agent") === e.agent));
+      document.querySelectorAll(".person").forEach((p) => p.classList.toggle("speaking", p.getAttribute("data-id") === e.agent));
       break;
     case "listening":
-      $("ptt").classList.toggle("rec", e.on);
-      $("feature").placeholder = e.on ? "Listening… press ⌘⇧Space again to send" : "What should the team build?";
+      $("ptt").setAttribute("aria-pressed", String(e.on));
+      refreshComposer(e.on);
       break;
     case "mode.changed":
       setMode(e.mode);
       break;
     case "phone.status":
-      phoneStatus(e);
+      phone(e);
       break;
     case "run.finished":
-      finish(e);
+      endRun(e);
       break;
     case "log":
-      if (e.level !== "info") feed({ from: "sys", text: e.text, kind: "sys" });
+      if (e.level !== "info") note(e.text, "bad");
       break;
   }
+  if (!replay) renderTimeline();
 }
 
-// ---------- team & stage ----------
+// ---------- roster ----------
 
-function setTeam(members, quiet) {
-  const before = new Set(agents.keys());
-  agents.clear();
-  for (const m of members) agents.set(m.id, m);
-  layout();
-  renderStage(quiet ? new Set(agents.keys()) : before);
-}
-
-function layout() {
-  pos.clear();
-  pos.set("lead", { x: CX, y: CY });
-  const workers = [...agents.values()].filter((a) => a.id !== "lead");
-  const n = workers.length;
-  const start = n === 2 ? 180 : -90;
-  workers.forEach((w, i) => {
-    const a = ((start + (i * 360) / n) * Math.PI) / 180;
-    pos.set(w.id, { x: CX + Math.cos(a) * 270, y: CY + Math.sin(a) * 178 });
-  });
-}
-
-function el(tag, attrs = {}, parent) {
-  const node = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
-  if (parent) parent.appendChild(node);
-  return node;
-}
-
-/** @param {Set<string>} existing ids that shouldn't animate in */
-function renderStage(existing) {
-  const grid = $("grid");
-  grid.innerHTML = "";
-  const spin = el("g", { class: "orbit-spin" }, grid);
-  for (const r of [120, 200, 300]) el("circle", { cx: CX, cy: CY, r }, spin);
-  el("line", { x1: 40, y1: CY, x2: 760, y2: CY }, grid);
-  el("line", { x1: CX, y1: 30, x2: CX, y2: 520 }, grid);
-
-  const links = $("links");
-  links.innerHTML = "";
-  const nodes = $("nodes");
-  nodes.innerHTML = "";
-
-  for (const a of agents.values()) {
-    const p = pos.get(a.id);
-    if (!p) continue;
-    if (a.id !== "lead") el("path", { class: "link", d: curve(pos.get("lead"), p) }, links);
-    const g = el("g", { class: "node" + (existing.has(a.id) ? "" : " enter"), "data-agent": a.id, transform: `translate(${p.x} ${p.y})`, style: `--c:${a.color}` }, nodes);
-    g.setAttribute("data-status", status.get(a.id)?.status ?? "idle");
-    if (a.id === speaking) g.classList.add("speaking");
-    if (a.id === "lead") drawLead(g);
-    else drawWorker(g, a);
-    const s = status.get(a.id);
-    if (s) setStatus(a.id, s.status, s.detail);
+function setTeam(members) {
+  for (const m of members) {
+    agents.set(m.id, m);
+    if (!people.has(m.id)) people.set(m.id, { status: "idle", files: [] });
   }
-
-  if (agents.size === 1) {
-    const t = el("text", { class: "hint-text", x: CX, y: CY + 128 }, nodes);
-    t.textContent = runStart ? "LEAD IS SIZING UP THE MISSION…" : "TEAM ON STANDBY";
-  }
-  refreshBadges();
+  for (const id of [...agents.keys()]) if (!members.some((m) => m.id === id)) agents.delete(id);
+  renderRoster();
 }
 
-function drawLead(g) {
-  g.classList.add("core");
-  el("circle", { class: "glow", r: 96 }, g);
-  el("circle", { class: "halo", r: 70, fill: "#f2b84b", filter: "url(#blur)", opacity: 0 }, g);
-  el("circle", { class: "spin1", r: 66 }, g);
-  el("circle", { class: "spin2", r: 56 }, g);
-  el("circle", { class: "ring", r: 48 }, g);
-  el("circle", { class: "orb", r: 40 }, g);
-  const t = el("text", { class: "mono", y: 0 }, g);
-  t.textContent = "LEAD";
-  t.setAttribute("style", "font-size:13px;letter-spacing:.24em;fill:#f2b84b");
-  drawWave(g, -78);
-  const d = el("text", { class: "detail", y: 88 }, g);
-  d.setAttribute("data-role", "detail");
-}
-
-function drawWorker(g, a) {
-  el("circle", { class: "halo", r: 56, fill: a.color, filter: "url(#blur)" }, g);
-  el("circle", { class: "ring", r: 42 }, g);
-  el("circle", { class: "disc", r: 34 }, g);
-  const m = el("text", { class: "mono" }, g);
-  m.textContent = initials(a.label);
-  const name = el("text", { class: "name", y: 62 }, g);
-  name.textContent = a.label.toUpperCase();
-  const kind = el("text", { class: "kind", y: 76 }, g);
-  const owns = a.owns.join(", ");
-  kind.textContent = shorten(owns && owns.toLowerCase() !== a.kind ? `${a.kind} · ${owns}` : a.kind, 34);
-  const d = el("text", { class: "detail", y: 92 }, g);
-  d.setAttribute("data-role", "detail");
-  drawWave(g, -60);
-}
-
-function drawWave(g, y) {
-  const w = el("g", { class: "wave", transform: `translate(-17 ${y})` }, g);
-  [0, 7, 14, 21, 28].forEach((x, i) => {
-    const r = el("rect", { x, y: -8, width: 4, height: 16, rx: 2 }, w);
-    r.setAttribute("style", `animation-delay:${(i % 3) * 0.13 + i * 0.05}s`);
-  });
-}
-
-function initials(label) {
-  const parts = label.trim().split(/\s+/);
-  return (parts.length > 1 ? parts[0][0] + parts[1][0] : label.slice(0, 2)).toUpperCase();
-}
-
-function curve(a, b) {
-  // Bend every link gently away from the center so beams don't overlap.
-  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const bend = Math.min(60, len * 0.18);
-  return `M${a.x},${a.y} Q${mx - (dy / len) * bend},${my + (dx / len) * bend} ${b.x},${b.y}`;
-}
-
-function nodeEl(id) {
-  return /** @type {SVGGElement|null} */ (document.querySelector(`.node[data-agent="${CSS.escape(id)}"]`));
-}
-
-function setStatus(id, s, detail) {
-  status.set(id, { status: s, detail });
-  const n = nodeEl(id);
-  if (!n) return;
-  n.setAttribute("data-status", s);
-  const d = n.querySelector('[data-role="detail"]');
-  if (d) d.textContent = shorten(detail ? `${label(s)} · ${detail}` : label(s), 40);
-}
-
-function label(s) {
-  return { idle: "standing by", thinking: "thinking", working: "working", waiting: "needs you", done: "done ✓", error: "hit a problem" }[s] ?? s;
-}
-
-function beam(from, to) {
-  const targets = to === "team" ? [...agents.keys()].filter((id) => id !== from && id !== "lead") : [to];
-  const a = agents.get(from);
-  for (const t of targets) {
-    const p1 = pos.get(from), p2 = pos.get(t);
-    if (!p1 || !p2 || !a) continue;
-    const d = curve(p1, p2);
-    const path = el("path", { class: "link hot", d, stroke: a.color }, $("links"));
-    const dot = el("circle", { r: 5, fill: a.color, class: "beam", style: `color:${a.color}` }, $("beams"));
-    const motion = el("animateMotion", { dur: "0.9s", path: d, fill: "freeze" }, dot);
-    // @ts-ignore beginElement exists on SVG animation elements
-    motion.beginElement?.();
-    setTimeout(() => dot.remove(), 1000);
-    setTimeout(() => path.remove(), 1900);
-  }
-}
-
-function bubble(id, text, to) {
-  const p = pos.get(id);
-  const a = agents.get(id);
-  if (!p || !a) return;
-  bubbleTimers.get(id)?.forEach(clearTimeout);
-  document.querySelector(`.bubble[data-agent="${CSS.escape(id)}"]`)?.remove();
-  const w = 220, h = 96;
-  // Keep bubbles off the nodes: the Lead talks into the empty upper-left
-  // quadrant, nodes on the vertical axis talk to their side, the rest above.
-  let x, y, align = "flex-end";
-  if (id === "lead") {
-    x = CX - 300;
-    y = CY - 200;
-  } else if (Math.abs(p.x - CX) < 80) {
-    x = p.x + 54;
-    y = p.y - h / 2;
-    align = "center";
-  } else {
-    x = p.x - w / 2;
-    y = p.y - 58 - h;
-  }
-  x = Math.max(6, Math.min(800 - w - 6, x));
-  y = Math.max(4, Math.min(560 - h - 4, y));
-  const fo = el("foreignObject", { class: "bubble", "data-agent": id, x, y, width: w, height: h, style: `--c:${a.color}` }, $("bubbles"));
-  const wrap = document.createElement("div");
-  wrap.setAttribute("style", `height:${h}px;display:flex;flex-direction:column;justify-content:${align}`);
-  const b = document.createElement("div");
-  b.className = "bb";
-  const head = document.createElement("b");
-  head.textContent = to && to !== "you" ? `${a.label.toUpperCase()} → ${(agents.get(to)?.label ?? to).toUpperCase()}` : a.label.toUpperCase();
-  b.append(head, document.createTextNode(text));
-  wrap.appendChild(b);
-  fo.appendChild(wrap);
-  const t1 = setTimeout(() => fo.classList.add("out"), Math.min(9000, 2600 + text.length * 45));
-  const t2 = setTimeout(() => fo.remove(), Math.min(9400, 3000 + text.length * 45));
-  bubbleTimers.set(id, [t1, t2]);
-}
-
-function chip(id, path) {
-  const p = pos.get(id);
-  const a = agents.get(id);
-  if (!p || !a) return;
-  const t = el("text", { class: "chip", x: p.x + 46, y: p.y - 18, style: `--c:${a.color}` }, $("bubbles"));
-  t.textContent = `✎ ${path.split("/").pop()}`;
-  setTimeout(() => t.remove(), 2700);
-}
-
-function refreshBadges() {
-  document.querySelectorAll(".node .badge, .node .badge-t").forEach((b) => b.remove());
-  for (const d of decisions.values()) {
-    if (d.done) continue;
-    const n = nodeEl(d.agent);
-    if (!n || n.querySelector(".badge")) continue;
-    const r = d.agent === "lead" ? 34 : 28;
-    el("circle", { class: "badge", cx: r, cy: -r, r: 9 }, n);
-    const t = el("text", { class: "badge-t", x: r, y: -r }, n);
-    t.textContent = "?";
-  }
-}
-
-// ---------- decisions ----------
-
-function addDecision(e) {
-  const body = $("dockBody");
-  body.querySelector(".quiet")?.remove();
-  const card = document.createElement("div");
-  card.className = "dcard pending";
-  card.style.setProperty("--c", color(e.agent));
-  const who = document.createElement("div");
-  who.className = "who";
-  who.innerHTML = `<span class="from"></span><span class="reason"></span>`;
-  who.children[0].textContent = name(e.agent).toUpperCase();
-  who.children[1].textContent = `· ${e.reason}`;
-  const q = document.createElement("div");
-  q.className = "q";
-  q.textContent = e.question;
-  const opts = document.createElement("div");
-  opts.className = "opts";
-  e.options.forEach((opt, i) => {
-    const b = document.createElement("button");
-    b.className = "opt";
-    b.innerHTML = `<kbd></kbd><span></span>`;
-    b.children[0].textContent = String(i + 1);
-    b.children[1].textContent = opt;
-    b.onclick = () => vscode.postMessage({ type: "answer", id: e.id, choice: opt });
-    opts.appendChild(b);
-  });
-  const say = document.createElement("div");
-  say.className = "say";
-  say.textContent = "…or just say it: ⌘⇧Space";
-  card.append(who, q, opts, say);
-  body.prepend(card);
-  decisions.set(e.id, { ...e, card, done: false });
-  updateCounts();
-  refreshBadges();
-  // In narrow panels the dock sits below the stage; bring the question into view.
-  if (window.innerWidth <= 900) card.scrollIntoView({ behavior: "smooth", block: "center" });
-}
-
-function answerDecision(e) {
-  const d = decisions.get(e.id);
-  if (!d) return;
-  d.done = true;
-  d.via = e.via;
-  const card = d.card;
-  card.className = "dcard done";
-  card.innerHTML = "";
-  const who = document.createElement("div");
-  who.className = "who";
-  who.textContent = name(d.agent).toUpperCase();
-  const q = document.createElement("div");
-  q.className = "q";
-  q.textContent = d.question;
-  const a = document.createElement("div");
-  a.innerHTML = `<span class="chose"></span><span class="via"></span>`;
-  a.children[0].textContent = `→ ${e.choice}`;
-  a.children[1].textContent = VIA[e.via] ?? e.via;
-  card.append(who, q, a);
-  // Answered cards sink below anything still pending.
-  $("dockBody").appendChild(card);
-  updateCounts();
-  refreshBadges();
-}
-
-function phoneStatus(e) {
-  feed({ from: "sys", text: `📞 ${e.status}`, kind: "sys" });
-  const d = e.decisionId && decisions.get(e.decisionId);
-  if (!d || d.done) return;
-  let line = d.card.querySelector(".phone");
-  if (!line) {
-    line = document.createElement("div");
-    line.className = "phone";
-    d.card.appendChild(line);
-  }
-  const ringing = /calling|ringing/.test(e.status);
-  line.innerHTML = ringing ? `<i>📞</i><span></span>` : `<span></span>`;
-  line.lastElementChild.textContent = ringing ? `${e.status === "calling" ? "Calling" : "Ringing"} your phone…` : e.status;
-}
-
-function updateCounts() {
-  const all = [...decisions.values()];
-  const open = all.filter((d) => !d.done).length;
-  $("pendingCount").textContent = open ? `${open} WAITING` : "";
-  const answered = all.filter((d) => d.done);
-  const byPhone = answered.filter((d) => d.via === "phone").length;
-  const byVoice = answered.filter((d) => d.via === "voice").length;
-  $("history").textContent = answered.length ? `${answered.length} DECISION${answered.length > 1 ? "S" : ""} · ${byVoice} 🎙 · ${byPhone} 📞` : "";
-}
-
-// ---------- feed ----------
-
-function feed({ from, to, text, kind = "" }) {
-  const f = $("feed");
-  f.querySelector(".quiet")?.remove();
-  const row = document.createElement("div");
-  row.className = `ln ${kind}`;
-  row.style.setProperty("--c", from === "you" ? "var(--cyan)" : color(from));
-  if (to && to !== "you") row.style.setProperty("--c2", color(to));
-  const t = document.createElement("span");
-  t.className = "t";
-  t.textContent = stamp();
-  const h = document.createElement("span");
-  h.className = "h";
-  const fromEl = document.createElement("span");
-  fromEl.className = "from";
-  fromEl.textContent = from === "you" ? "YOU" : from === "sys" ? "SYSTEM" : name(from).toUpperCase();
-  h.appendChild(fromEl);
-  if (to && to !== "you") {
-    const arrow = document.createElement("span");
-    arrow.className = "arrow";
-    arrow.textContent = "→";
-    const toEl = document.createElement("span");
-    toEl.className = "to";
-    toEl.textContent = to === "team" ? "TEAM" : name(to).toUpperCase();
-    h.append(arrow, toEl);
-  }
-  const x = document.createElement("span");
-  x.className = "x";
-  x.textContent = shorten(text, 420);
-  row.append(t, h, x);
-  f.appendChild(row);
-  while (f.children.length > 250) f.firstElementChild?.remove();
-  f.scrollTop = f.scrollHeight;
-}
-
-// ---------- run lifecycle ----------
-
-function resetRun(feature, start) {
-  runStart = start;
-  status.clear();
-  decisions.clear();
-  $("feed").innerHTML = "";
-  $("dockBody").innerHTML = "";
-  $("summary").hidden = true;
-  $("mission").textContent = feature;
-  $("mission").title = feature;
-  setLive("live", "LIVE");
-  clearInterval(clockTimer);
-  tick();
-  clockTimer = setInterval(tick, 1000);
-  updateCounts();
-}
-
-function finish(e) {
-  clearInterval(clockTimer);
-  setLive(e.ok ? "done" : "stopped", e.ok ? "COMPLETE" : "STOPPED");
-  if (e.summary) {
-    $("summaryText").textContent = e.summary;
-    $("summary").hidden = false;
-  }
-  if (!$("dockBody").children.length) $("dockBody").innerHTML = `<p class="quiet">No decisions were needed.</p>`;
-}
-
-function setLive(state, text) {
-  $("live").setAttribute("data-state", state);
-  $("liveText").textContent = text;
-}
-
-function tick() {
-  $("clock").textContent = stamp();
-}
-
-function stamp() {
-  if (!runStart) return "00:00";
-  const s = Math.max(0, Math.floor((Date.now() - runStart) / 1000));
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-}
-
-// ---------- chrome ----------
-
-function setMode(mode) {
-  $("modeDesk").classList.toggle("on", mode === "desk");
-  $("modeAway").classList.toggle("on", mode === "away");
-}
-
-function renderSystems(s) {
-  const ul = $("status");
+function renderRoster() {
+  const ul = $("people");
   ul.innerHTML = "";
-  for (const [k, v] of Object.entries(s)) {
+  for (const a of agents.values()) {
+    const p = people.get(a.id) ?? { status: "idle", files: [] };
     const li = document.createElement("li");
-    const ok = !/^(missing|off|not)/i.test(String(v));
-    if (!ok) li.className = "no";
-    li.title = `${k}: ${v}`;
-    li.innerHTML = `<b></b><span><em></em> </span>`;
-    li.querySelector("em").textContent = k;
-    li.querySelector("span").append(shorten(String(v), 30));
+    li.className = "person";
+    li.dataset.id = a.id;
+    li.style.setProperty("--c", a.color);
+    if (p.status === "waiting") li.classList.add("waiting");
+    if (a.id === speaking) li.classList.add("speaking");
+
+    const name = document.createElement("div");
+    name.className = "p-name";
+    const n = document.createElement("span");
+    n.textContent = a.label;
+    const kind = document.createElement("span");
+    kind.className = "kind";
+    kind.textContent = a.id === "lead" ? "runs the call" : describeOwns(a);
+    const bars = document.createElement("span");
+    bars.className = "bars";
+    bars.setAttribute("aria-label", "speaking");
+    bars.innerHTML = "<i></i><i></i><i></i>";
+    name.append(n, kind, bars);
+
+    const state = document.createElement("div");
+    state.className = "p-state";
+    if (p.status === "done") state.classList.add("done");
+    if (p.status === "error") state.classList.add("error");
+    state.textContent = stateText(a.id, p);
+    state.title = state.textContent;
+
+    li.append(avatar(a.id), name, state);
+    if (p.files.length) {
+      const files = document.createElement("ul");
+      files.className = "p-files";
+      for (const f of p.files.slice(-3)) {
+        const fl = document.createElement("li");
+        fl.textContent = f;
+        fl.title = f;
+        files.appendChild(fl);
+      }
+      if (p.files.length > 3) {
+        const more = document.createElement("li");
+        more.textContent = `and ${p.files.length - 3} more`;
+        files.appendChild(more);
+      }
+      li.appendChild(files);
+    }
     ul.appendChild(li);
   }
 }
 
-function name(id) {
-  return agents.get(id)?.label ?? (id === "lead" ? "Lead" : id);
-}
-function color(id) {
-  return agents.get(id)?.color ?? "#7f8bb3";
-}
-function shorten(s, n) {
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+function describeOwns(a) {
+  const owns = a.owns.filter((o) => o !== ".").map((o) => `${o}/`);
+  return owns.length ? owns.join(" ") : a.kind;
 }
 
-$("startForm").addEventListener("submit", (ev) => {
+function stateText(id, p) {
+  const d = p.detail ? humanDetail(p.detail) : "";
+  switch (p.status) {
+    case "thinking": return id === "lead" && !runStart ? "Ready" : d || "Thinking";
+    case "working": return d || "Working";
+    case "waiting": return d.startsWith("same question") ? "Waiting on the same answer" : "Waiting for you";
+    case "done": return p.files.length ? `Done, changed ${p.files.length} file${p.files.length > 1 ? "s" : ""}` : "Done";
+    case "error": return "Ran into a problem";
+    default: return d ? capitalize(d) : runStart ? "Waiting to start" : "Ready";
+  }
+}
+
+/** "Edit server.js" → "Editing server.js", "$ npm test" → "Running npm test". */
+function humanDetail(d) {
+  if (d.startsWith("$ ")) return `Running ${d.slice(2)}`;
+  const m = d.match(/^(Read|Edit|Write|Grep|Glob|MultiEdit)\s*(.*)$/);
+  if (m) {
+    const verb = { Read: "Reading", Edit: "Editing", MultiEdit: "Editing", Write: "Writing", Grep: "Searching", Glob: "Looking through" }[m[1]];
+    return `${verb} ${m[2] || "the code"}`.trim();
+  }
+  return d;
+}
+
+function setStatus(id, status, detail) {
+  const p = people.get(id) ?? { status: "idle", files: [] };
+  p.status = status;
+  p.detail = detail;
+  people.set(id, p);
+  renderRoster();
+}
+
+function fileChanged(id, path) {
+  const p = people.get(id) ?? { status: "working", files: [] };
+  if (!p.files.includes(path)) p.files.push(path);
+  people.set(id, p);
+  renderRoster();
+}
+
+function avatar(id) {
+  const el = document.createElement("span");
+  el.className = "avatar";
+  if (id === "you") {
+    el.classList.add("you");
+    el.textContent = "You";
+    return el;
+  }
+  const a = agents.get(id);
+  el.style.setProperty("--c", a?.color ?? "#777");
+  el.textContent = initials(a?.label ?? id);
+  el.setAttribute("aria-hidden", "true");
+  return el;
+}
+
+function initials(label) {
+  return label.trim().charAt(0).toUpperCase();
+}
+
+// ---------- thread ----------
+
+function thread() {
+  const t = $("thread");
+  t.querySelector(".empty")?.remove();
+  return t;
+}
+
+function scrollDown() {
+  const t = $("thread");
+  t.scrollTop = t.scrollHeight;
+}
+
+/** Consecutive lines from the same person (to the same audience) share one header. */
+function group(from, to) {
+  const key = `${from}>${to ?? "you"}`;
+  const now = elapsed();
+  if (lastGroup && lastGroup.key === key && now - lastGroup.at < 90) {
+    lastGroup.at = now;
+    return lastGroup.lines;
+  }
+  const g = document.createElement("div");
+  g.className = "group";
+  const head = document.createElement("div");
+  head.className = "g-head";
+  const name = document.createElement("span");
+  name.className = "g-name";
+  name.textContent = from === "you" ? "You" : label(from);
+  head.appendChild(name);
+  if (to && to !== "you") {
+    const toEl = document.createElement("span");
+    toEl.className = "g-to";
+    toEl.append("to ");
+    const b = document.createElement("b");
+    b.textContent = to === "team" ? "the team" : label(to);
+    toEl.appendChild(b);
+    head.appendChild(toEl);
+  }
+  const time = document.createElement("span");
+  time.className = "g-time";
+  time.textContent = stamp(now);
+  head.appendChild(time);
+  const lines = document.createElement("div");
+  lines.className = "g-lines";
+  g.append(avatar(from), head, lines);
+  thread().appendChild(g);
+  lastGroup = { key, el: g, lines, at: now };
+  return lines;
+}
+
+function say(from, text, to) {
+  const p = document.createElement("p");
+  p.className = "line" + (to && to !== "you" ? " peer" : "");
+  p.textContent = text;
+  group(from, to).appendChild(p);
+  scrollDown();
+}
+
+function message(e) {
+  if (e.to === "team" && e.text.startsWith("Contract:")) {
+    const d = document.createElement("details");
+    d.className = "contract";
+    const s = document.createElement("summary");
+    s.textContent = "Published the interface everyone builds against";
+    const pre = document.createElement("pre");
+    pre.textContent = e.text.replace(/^Contract:\s*/, "");
+    d.append(s, pre);
+    group(e.from, "team").appendChild(d);
+    lastGroup = null;
+    scrollDown();
+    return;
+  }
+  // The Lead's task hand-offs right after hiring read as one list.
+  if (e.from === "lead" && assignBlock && agents.has(e.to) && !assignBlock.done.has(e.to)) {
+    assignBlock.done.add(e.to);
+    const li = document.createElement("li");
+    li.style.setProperty("--c", agents.get(e.to)?.color ?? "inherit");
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = label(e.to);
+    const task = document.createElement("span");
+    task.textContent = e.text;
+    li.append(who, task);
+    assignBlock.el.appendChild(li);
+    if (assignBlock.done.size >= agents.size - 1) assignBlock = null;
+    scrollDown();
+    return;
+  }
+  say(e.from, e.text, e.to);
+  tick(e.from, true);
+}
+
+function teamNote(members) {
+  const workers = members.filter((m) => m.id !== "lead");
+  const lines = group("lead", "you");
+  const p = document.createElement("p");
+  p.className = "line";
+  p.textContent = `I've brought in ${listNames(workers.map((w) => w.label))}. Here's who's doing what:`;
+  const ul = document.createElement("ul");
+  ul.className = "assign";
+  lines.append(p, ul);
+  assignBlock = { el: ul, done: new Set() };
+  lastGroup = null;
+  scrollDown();
+}
+
+function note(text, kind = "") {
+  const p = document.createElement("p");
+  p.className = "note" + (kind ? ` ${kind}` : "");
+  p.textContent = text;
+  thread().appendChild(p);
+  lastGroup = null;
+  scrollDown();
+}
+
+// ---------- questions ----------
+
+function ask(e) {
+  const card = document.createElement("section");
+  card.className = "ask";
+  card.setAttribute("aria-label", `Question from ${label(e.agent)}`);
+  const head = document.createElement("div");
+  head.className = "ask-head";
+  const who = document.createElement("span");
+  const b = document.createElement("b");
+  b.textContent = label(e.agent);
+  who.append(b, ` needs a decision${e.reason && e.reason !== "other" ? ` · ${reasonText(e.reason)}` : ""}`);
+  head.append(avatar(e.agent), who);
+  const q = document.createElement("p");
+  q.className = "ask-q";
+  q.textContent = e.question;
+  const opts = document.createElement("div");
+  opts.className = "ask-opts";
+  e.options.forEach((opt, i) => {
+    const btn = document.createElement("button");
+    btn.className = i === 0 ? "btn-primary" : "btn-secondary";
+    const k = document.createElement("kbd");
+    k.textContent = String(i + 1);
+    btn.append(k, opt);
+    btn.onclick = () => vscode.postMessage({ type: "answer", id: e.id, choice: opt });
+    opts.appendChild(btn);
+  });
+  const foot = document.createElement("div");
+  foot.className = "ask-foot";
+  foot.textContent = "Answer out loud with ⌘⇧Space, type it below, or press a number.";
+  card.append(head, q, opts, foot);
+  $("pinned").appendChild(card);
+  $("pinned").hidden = false;
+  asks.set(e.id, { ...e, card, foot, at: elapsed() });
+  marks.push({ id: e.id, t: elapsed() });
+  refreshComposer(false);
+}
+
+function answered(e) {
+  const a = asks.get(e.id);
+  if (!a) return;
+  a.done = true;
+  a.card.remove();
+  $("pinned").hidden = !$("pinned").children.length;
+
+  const rec = document.createElement("section");
+  rec.className = "ask answered";
+  const head = document.createElement("div");
+  head.className = "ask-head";
+  const who = document.createElement("span");
+  const b = document.createElement("b");
+  b.textContent = label(a.agent);
+  who.append(b, " asked");
+  head.append(avatar(a.agent), who);
+  const q = document.createElement("p");
+  q.className = "ask-q";
+  q.textContent = a.question;
+  const ans = document.createElement("div");
+  const choice = document.createElement("span");
+  choice.className = "choice";
+  choice.textContent = e.choice.replace(/ \(the developer answered.*$/, "");
+  const via = document.createElement("span");
+  via.className = "via";
+  via.textContent = ` · ${VIA[e.via] ?? e.via}`;
+  ans.append("You chose ", choice, via);
+  rec.append(head, q, ans);
+  thread().appendChild(rec);
+  lastGroup = null;
+  scrollDown();
+  refreshComposer(false);
+}
+
+function phone(e) {
+  const a = e.decisionId ? asks.get(e.decisionId) : null;
+  if (a && !a.done) {
+    const calling = /calling|ringing/.test(e.status);
+    a.foot.className = "ask-foot" + (calling ? " calling" : "");
+    a.foot.innerHTML = calling ? '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.2 2.2 3.4 2c-.8 0-1.4.7-1.3 1.5.6 5.4 4.9 9.7 10.3 10.3.8.1 1.5-.5 1.5-1.3l-.2-1.8-2.6-1.1-1.3 1.3c-1.7-.8-3-2.1-3.8-3.8l1.3-1.3z"/></svg><span></span>' : "<span></span>";
+    a.foot.lastElementChild.textContent =
+      e.status === "calling" ? "Calling your phone…" : e.status === "ringing" ? "Your phone is ringing. Pick up to answer." : capitalize(e.status);
+  }
+  if (/can't call|failed|without an answer|couldn't/.test(e.status)) note(`Phone: ${e.status}`, "bad");
+}
+
+function reasonText(r) {
+  return { contract: "how two parts talk to each other", package: "a new package", test: "existing tests", schema: "the data model", destructive: "something destructive", access: "outside the project" }[r] ?? r;
+}
+
+// ---------- run lifecycle ----------
+
+function startRun(feature) {
+  runStart = Date.now();
+  runEnd = 0;
+  live = true;
+  ticks = [];
+  marks = [];
+  asks.clear();
+  people.clear();
+  lastGroup = null;
+  assignBlock = null;
+  $("thread").innerHTML = "";
+  $("pinned").innerHTML = "";
+  $("pinned").hidden = true;
+  $("title").textContent = feature;
+  $("stop").removeAttribute("disabled");
+  $("timeline").hidden = false;
+  clearInterval(clock);
+  clock = setInterval(() => {
+    renderMeta();
+    renderTimeline();
+  }, 1000);
+  renderMeta();
+  refreshComposer(false);
+  say("you", feature);
+}
+
+function endRun(e) {
+  live = false;
+  runEnd = Date.now();
+  clearInterval(clock);
+  renderMeta(e.ok ? "Finished" : "Ended early");
+  renderTimeline();
+  $("stop").setAttribute("disabled", "");
+  refreshComposer(false);
+
+  const wrap = document.createElement("section");
+  wrap.className = "wrap";
+  const h = document.createElement("h3");
+  h.textContent = e.ok ? "Wrap-up" : "Stopped";
+  wrap.appendChild(h);
+  if (e.summary) {
+    const p = document.createElement("p");
+    p.textContent = e.summary;
+    wrap.appendChild(p);
+  }
+  const ul = document.createElement("ul");
+  for (const a of agents.values()) {
+    const p = people.get(a.id);
+    if (!p?.files.length) continue;
+    const li = document.createElement("li");
+    const b = document.createElement("b");
+    b.textContent = a.label;
+    li.append(b, ` changed ${p.files.join(", ")}`);
+    ul.appendChild(li);
+  }
+  const decided = [...asks.values()].filter((x) => x.done).length;
+  if (decided) {
+    const li = document.createElement("li");
+    li.textContent = `You made ${decided} decision${decided > 1 ? "s" : ""}.`;
+    ul.appendChild(li);
+  }
+  if (ul.children.length) wrap.appendChild(ul);
+  thread().appendChild(wrap);
+  lastGroup = null;
+  scrollDown();
+}
+
+function renderMeta(endedLabel) {
+  const meta = $("meta");
+  meta.innerHTML = "";
+  const dot = document.createElement("span");
+  dot.className = "live-dot" + (live ? "" : " ended");
+  const count = agents.size;
+  meta.append(dot, `${endedLabel ?? (live ? "Live" : "Ended")} · ${stamp(elapsed())} · ${count} ${count === 1 ? "person" : "people"} on the call`);
+}
+
+function renderTimeline() {
+  const tl = $("timeline");
+  if (!runStart) return;
+  const total = Math.max(elapsed(), 10);
+  tl.innerHTML = "";
+  for (const a of agents.values()) {
+    const name = document.createElement("div");
+    name.className = "tl-name";
+    name.textContent = a.label;
+    const track = document.createElement("div");
+    track.className = "tl-track";
+    track.style.setProperty("--c", a.color);
+    for (const t of ticks) {
+      if (t.agent !== a.id) continue;
+      const tickEl = document.createElement("span");
+      tickEl.className = "tl-tick" + (t.peer ? " peer" : "");
+      tickEl.style.left = `${(t.t / total) * 100}%`;
+      track.appendChild(tickEl);
+    }
+    for (const m of marks) {
+      const ask = asks.get(m.id);
+      if (!ask || ask.agent !== a.id) continue;
+      const mk = document.createElement("span");
+      mk.className = "tl-mark" + (ask.done ? " done" : "");
+      mk.style.left = `${(m.t / total) * 100}%`;
+      mk.title = ask.question;
+      track.appendChild(mk);
+    }
+    tl.append(name, track);
+  }
+}
+
+function tick(agent, peer) {
+  if (runStart) ticks.push({ agent, t: elapsed(), peer });
+}
+
+function elapsed() {
+  if (!runStart) return 0;
+  return Math.max(0, ((runEnd || Date.now()) - runStart) / 1000);
+}
+
+function stamp(s) {
+  const n = Math.floor(s);
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+}
+
+// ---------- chrome ----------
+
+function showEmpty() {
+  const t = $("thread");
+  if (t.children.length) return;
+  const box = document.createElement("div");
+  box.className = "empty";
+  const h = document.createElement("h2");
+  h.textContent = "Start a standup";
+  const p = document.createElement("p");
+  p.textContent = "Describe a feature. The Lead looks over the repo, asks you one question, and brings in the people it needs. They'll check with you only when a real decision comes up.";
+  const list = document.createElement("div");
+  list.className = "suggestions";
+  for (const s of SUGGESTIONS) {
+    const b = document.createElement("button");
+    b.textContent = s;
+    b.onclick = () => vscode.postMessage({ type: "say", text: s });
+    list.appendChild(b);
+  }
+  box.append(h, p, list);
+  t.appendChild(box);
+}
+
+function refreshComposer(listening) {
+  const input = /** @type {HTMLInputElement} */ ($("input"));
+  const pending = [...asks.values()].some((a) => !a.done);
+  input.placeholder = listening
+    ? "Listening… press ⌘⇧Space again when you're done"
+    : pending
+      ? "Type your answer, or press a number"
+      : live
+        ? "Tell the team something"
+        : "Describe a feature to build";
+  $("send").textContent = live ? "Send" : "Start standup";
+}
+
+function setMode(mode) {
+  $("modeDesk").setAttribute("aria-checked", String(mode === "desk"));
+  $("modeAway").setAttribute("aria-checked", String(mode === "away"));
+}
+
+function renderSystems(s) {
+  const dl = $("systems");
+  dl.innerHTML = "";
+  const names = { Agents: "Signed in", Model: "Model", Voice: "Voices", Mic: "Microphone", Phone: "Phone", Server: "Callback", Repo: "Repo" };
+  for (const [k, v] of Object.entries(s)) {
+    if (k === "Repo") continue;
+    const dt = document.createElement("dt");
+    dt.textContent = names[k] ?? k;
+    const dd = document.createElement("dd");
+    dd.textContent = String(v);
+    dd.title = String(v);
+    if (/^(missing|off|not)/i.test(String(v))) dd.className = "off";
+    dl.append(dt, dd);
+  }
+}
+
+function label(id) {
+  return agents.get(id)?.label ?? (id === "lead" ? "Lead" : id);
+}
+function listNames(names) {
+  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+$("composer").addEventListener("submit", (ev) => {
   ev.preventDefault();
-  const input = /** @type {HTMLInputElement} */ ($("feature"));
+  const input = /** @type {HTMLInputElement} */ ($("input"));
   const text = input.value.trim();
   if (!text) return;
-  vscode.postMessage({ type: "start", text });
+  vscode.postMessage({ type: "say", text });
   input.value = "";
 });
 $("modeDesk").onclick = () => vscode.postMessage({ type: "mode", mode: "desk" });
@@ -513,14 +631,14 @@ $("modeAway").onclick = () => vscode.postMessage({ type: "mode", mode: "away" })
 $("ptt").onclick = () => vscode.postMessage({ type: "ptt" });
 $("stop").onclick = () => vscode.postMessage({ type: "stop" });
 
-// 1-4 answers the oldest waiting decision, unless you're typing.
+// 1-4 answers the oldest open question, unless you're typing.
 document.addEventListener("keydown", (ev) => {
-  if (document.activeElement && document.activeElement.tagName === "INPUT") return;
+  if (document.activeElement?.tagName === "INPUT" || ev.metaKey || ev.ctrlKey) return;
   const n = Number(ev.key);
   if (!n || n > 4) return;
-  const open = [...decisions.values()].find((d) => !d.done);
-  if (open && open.options[n - 1]) vscode.postMessage({ type: "answer", id: open.id, choice: open.options[n - 1] });
+  const open = [...asks.values()].find((a) => !a.done);
+  if (open?.options[n - 1]) vscode.postMessage({ type: "answer", id: open.id, choice: open.options[n - 1] });
 });
 
-setTeam([{ id: "lead", label: "Lead", kind: "lead", color: "#f2b84b", owns: [] }], true);
+refreshComposer(false);
 vscode.postMessage({ type: "ready" });

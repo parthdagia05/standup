@@ -59,6 +59,7 @@ export function activate(context: vscode.ExtensionContext): void {
       StandupPanel.show(context, actions);
       orchestrator.run(feature.trim()).catch((err) => vscode.window.showErrorMessage(`Standup: ${err.message}`));
     },
+    say: (text: string) => void handleUtterance(text),
     pushToTalk: () => void pushToTalk(),
     stop: () => {
       orchestrator.stop();

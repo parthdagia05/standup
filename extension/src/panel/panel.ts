@@ -5,12 +5,14 @@ import { team } from "../voice/voices";
 
 export interface PanelActions {
   start(feature: string): void;
+  /** Typed text from the message box: a new feature when idle, a note to the team mid-run. */
+  say(text: string): void;
   pushToTalk(): void;
   stop(): void;
   status(): Record<string, string>;
 }
 
-/** Mission Control: the team on a stage, the decision dock, and the live feed. */
+/** The standup call: who's on it, what they're saying, and what they need from you. */
 export class StandupPanel {
   private static current: StandupPanel | undefined;
   private disposables: vscode.Disposable[] = [];
@@ -49,6 +51,9 @@ export class StandupPanel {
             break;
           case "start":
             this.actions.start(String(msg.text ?? ""));
+            break;
+          case "say":
+            this.actions.say(String(msg.text ?? ""));
             break;
           case "answer":
             decisions.answer(String(msg.id), String(msg.choice), "click");
@@ -93,59 +98,41 @@ export class StandupPanel {
 </head>
 <body>
 <div class="app">
-  <header class="bar">
-    <div class="brand">
-      <span class="sigil" aria-hidden="true"><i></i><i></i><i></i></span>
-      <span class="word">STANDUP</span>
-      <span id="live" class="live" data-state="idle"><b></b><span id="liveText">STANDBY</span></span>
-      <span id="clock" class="clock">00:00</span>
+  <header class="head">
+    <div class="title-block">
+      <h1 id="title">Standup</h1>
+      <p id="meta" class="meta">No call in progress</p>
     </div>
-    <div id="mission" class="mission" title=""></div>
-    <div class="controls">
-      <div class="seg" role="group" aria-label="Where decisions reach you">
-        <button id="modeDesk" class="on" title="Decisions are spoken here">🎙 Desk</button>
-        <button id="modeAway" title="Decisions come as a phone call">📞 Away</button>
+    <div class="head-actions">
+      <div class="seg" role="radiogroup" aria-label="Where questions reach you">
+        <button id="modeDesk" role="radio" aria-checked="true">At my desk</button>
+        <button id="modeAway" role="radio" aria-checked="false">Away, call me</button>
       </div>
-      <button id="stop" class="ghost" title="Stop all agents">■ Stop</button>
+      <button id="stop" class="btn-quiet" disabled>End standup</button>
     </div>
   </header>
 
-  <main class="deck">
-    <section class="stage-wrap">
-      <svg id="stage" class="stage" viewBox="0 0 800 560" preserveAspectRatio="xMidYMid meet" aria-label="Team">
-        <defs>
-          <radialGradient id="coreGlow"><stop offset="0" stop-color="#f2b84b" stop-opacity=".55"/><stop offset="1" stop-color="#f2b84b" stop-opacity="0"/></radialGradient>
-          <filter id="blur"><feGaussianBlur stdDeviation="6"/></filter>
-        </defs>
-        <g id="grid" class="grid"></g>
-        <g id="links"></g>
-        <g id="beams"></g>
-        <g id="nodes"></g>
-        <g id="bubbles"></g>
-      </svg>
-      <div id="summary" class="summary" hidden><span class="tag">MISSION COMPLETE</span><p id="summaryText"></p></div>
-      <form id="startForm" class="launch">
-        <button type="button" id="ptt" class="mic" title="Push to talk (⌘⇧Space)" aria-label="Push to talk"><span class="mic-ico"></span><span class="rings"></span></button>
-        <input id="feature" placeholder="What should the team build?" autocomplete="off">
-        <button type="submit" class="go">Launch ↵</button>
-      </form>
-    </section>
+  <div id="timeline" class="timeline" aria-label="Who spoke when" hidden></div>
 
-    <aside class="side">
-      <section id="dock" class="dock" data-state="empty">
-        <div class="dock-head"><span class="tag">DECISION DOCK</span><span id="pendingCount" class="count"></span></div>
-        <div id="dockBody" class="dock-body"><p class="quiet">The team only interrupts you for real calls. Nothing pending.</p></div>
-      </section>
-      <section class="feed-wrap">
-        <div class="dock-head"><span class="tag">LIVE FEED</span></div>
-        <div id="feed" class="feed"><p class="quiet">Comms are quiet. Launch a mission to hear the team.</p></div>
-      </section>
-      <section class="systems">
-        <div class="dock-head"><span class="tag">SYSTEMS</span><span id="history" class="hist"></span></div>
-        <ul id="status" class="status"></ul>
-      </section>
+  <div class="body">
+    <aside class="roster" aria-label="On the call">
+      <h2 class="section-label">On the call</h2>
+      <ul id="people" class="people"></ul>
+      <dl id="systems" class="systems"></dl>
     </aside>
-  </main>
+
+    <main class="thread-col">
+      <div id="pinned" class="pinned" hidden></div>
+      <div id="thread" class="thread" aria-live="polite"></div>
+      <form id="composer" class="composer">
+        <button type="button" id="ptt" class="mic" title="Talk (⌘⇧Space)" aria-label="Talk to the team" aria-pressed="false">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5"/><path d="M3 7.5a5 5 0 0 0 10 0M8 12.5v2"/></svg>
+        </button>
+        <input id="input" autocomplete="off" aria-label="Message">
+        <button type="submit" id="send" class="btn-primary">Start standup</button>
+      </form>
+    </main>
+  </div>
 </div>
 <script nonce="${nonce}" src="${media("panel.js")}"></script>
 </body>
