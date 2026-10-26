@@ -10,7 +10,7 @@ export interface PanelActions {
   status(): Record<string, string>;
 }
 
-/** The webview: agent cards, live transcript, decision log, Desk/Away. */
+/** Mission Control: the team on a stage, the decision dock, and the live feed. */
 export class StandupPanel {
   private static current: StandupPanel | undefined;
   private disposables: vscode.Disposable[] = [];
@@ -92,37 +92,61 @@ export class StandupPanel {
 <title>Standup</title>
 </head>
 <body>
-<header>
-  <div class="brand"><span class="logo">●</span> Standup <span id="runState" class="run-state">idle</span></div>
-  <div class="controls">
-    <div class="mode" role="group" aria-label="Where are you">
-      <button id="modeDesk" class="seg on" title="Decisions are spoken here">🎙 Desk</button>
-      <button id="modeAway" class="seg" title="Decisions come as a phone call">📞 Away</button>
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <span class="sigil" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="word">STANDUP</span>
+      <span id="live" class="live" data-state="idle"><b></b><span id="liveText">STANDBY</span></span>
+      <span id="clock" class="clock">00:00</span>
     </div>
-    <button id="ptt" class="ptt" title="Push to talk (⌘⇧Space)">🎙 Talk <kbd>⌘⇧Space</kbd></button>
-    <button id="stop" class="ghost" title="Stop all agents">Stop</button>
-  </div>
-</header>
+    <div id="mission" class="mission" title=""></div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Where decisions reach you">
+        <button id="modeDesk" class="on" title="Decisions are spoken here">🎙 Desk</button>
+        <button id="modeAway" title="Decisions come as a phone call">📞 Away</button>
+      </div>
+      <button id="stop" class="ghost" title="Stop all agents">■ Stop</button>
+    </div>
+  </header>
 
-<form id="startForm" class="start">
-  <input id="feature" placeholder="Say or type a feature, e.g. Add pagination and search to todos" autocomplete="off">
-  <button type="submit">Start</button>
-</form>
+  <main class="deck">
+    <section class="stage-wrap">
+      <svg id="stage" class="stage" viewBox="0 0 800 560" preserveAspectRatio="xMidYMid meet" aria-label="Team">
+        <defs>
+          <radialGradient id="coreGlow"><stop offset="0" stop-color="#f2b84b" stop-opacity=".55"/><stop offset="1" stop-color="#f2b84b" stop-opacity="0"/></radialGradient>
+          <filter id="blur"><feGaussianBlur stdDeviation="6"/></filter>
+        </defs>
+        <g id="grid" class="grid"></g>
+        <g id="links"></g>
+        <g id="beams"></g>
+        <g id="nodes"></g>
+        <g id="bubbles"></g>
+      </svg>
+      <div id="summary" class="summary" hidden><span class="tag">MISSION COMPLETE</span><p id="summaryText"></p></div>
+      <form id="startForm" class="launch">
+        <button type="button" id="ptt" class="mic" title="Push to talk (⌘⇧Space)" aria-label="Push to talk"><span class="mic-ico"></span><span class="rings"></span></button>
+        <input id="feature" placeholder="What should the team build?" autocomplete="off">
+        <button type="submit" class="go">Launch ↵</button>
+      </form>
+    </section>
 
-<section id="cards" class="cards"></section>
-
-<main class="grid">
-  <section class="col">
-    <h2>Transcript</h2>
-    <div id="transcript" class="transcript"><p class="empty">Nothing yet. Start a feature to hear the team.</p></div>
-  </section>
-  <section class="col">
-    <h2>Decisions <span id="pendingCount" class="count"></span></h2>
-    <div id="decisions" class="decisions"><p class="empty">The team will ask you here only when it matters.</p></div>
-    <h2 class="sub">Status</h2>
-    <ul id="status" class="status"></ul>
-  </section>
-</main>
+    <aside class="side">
+      <section id="dock" class="dock" data-state="empty">
+        <div class="dock-head"><span class="tag">DECISION DOCK</span><span id="pendingCount" class="count"></span></div>
+        <div id="dockBody" class="dock-body"><p class="quiet">The team only interrupts you for real calls. Nothing pending.</p></div>
+      </section>
+      <section class="feed-wrap">
+        <div class="dock-head"><span class="tag">LIVE FEED</span></div>
+        <div id="feed" class="feed"><p class="quiet">Comms are quiet. Launch a mission to hear the team.</p></div>
+      </section>
+      <section class="systems">
+        <div class="dock-head"><span class="tag">SYSTEMS</span><span id="history" class="hist"></span></div>
+        <ul id="status" class="status"></ul>
+      </section>
+    </aside>
+  </main>
+</div>
 <script nonce="${nonce}" src="${media("panel.js")}"></script>
 </body>
 </html>`;
