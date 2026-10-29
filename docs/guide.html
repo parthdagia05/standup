@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Standup setup guide</title>
+<meta name="description" content="Install Standup, add your keys, connect Bolna, and run your first task in about ten minutes.">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <a class="brand" href="index.html"><i>●</i> Standup</a>
+    <a class="link" href="index.html">Home</a>
+    <a class="link" href="https://github.com/parthdagia05/standup">GitHub</a>
+  </div>
+</nav>
+
+<article class="guide">
+  <h1>Setup guide</h1>
+  <p class="sub">From a fresh clone to your first run. The desk flow needs about ten minutes. Away mode (the phone call) adds a Bolna agent and ngrok.</p>
+  <div class="toc">
+    <a href="#prereq">Prerequisites</a><a href="#install">Install</a><a href="#keys">Keys</a><a href="#run">Run</a><a href="#bolna">Phone calls</a><a href="#access">Settings</a><a href="#try">First task</a><a href="#help">Troubleshooting</a>
+  </div>
+
+  <h2 id="prereq">1. Prerequisites</h2>
+  <ul>
+    <li>macOS (voice uses <code>say</code> and <code>sox</code>)</li>
+    <li>Node.js 20 or newer, and VS Code 1.95 or newer</li>
+    <li><code>sox</code> for the microphone: <code>brew install sox</code></li>
+    <li>Agent login: either a Claude Code login on this machine, or an <code>ANTHROPIC_API_KEY</code></li>
+    <li>A <a href="https://deepgram.com">Deepgram</a> key for push to talk. Without it you type your answers.</li>
+    <li>Optional: a <a href="https://cartesia.ai">Cartesia</a> key for distinct agent voices. Without it agents use macOS voices.</li>
+    <li>For Away mode only: a <a href="https://bolna.ai">Bolna</a> account and <a href="https://ngrok.com">ngrok</a>, logged in</li>
+  </ul>
+
+  <h2 id="install">2. Install and build</h2>
+<pre><code>git clone https://github.com/parthdagia05/standup.git
+cd standup/extension
+npm install
+npm run build</code></pre>
+
+  <h2 id="keys">3. Add your keys</h2>
+<pre><code>cp .env.example .env     # .env is git-ignored</code></pre>
+  <p>Every key is optional, and a missing one falls back to something that still works.</p>
+  <table>
+    <tr><th>Variable</th><th>What it does</th></tr>
+    <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Agents use it. Without it, they use this machine's Claude Code login.</td></tr>
+    <tr><td><code>DEEPGRAM_API_KEY</code></td><td>Push to talk. Without it a text box opens.</td></tr>
+    <tr><td><code>CARTESIA_API_KEY</code></td><td>Agent voices. Without it, macOS <code>say</code>.</td></tr>
+    <tr><td><code>BOLNA_API_KEY</code>, <code>BOLNA_AGENT_ID</code></td><td>Away mode phone calls.</td></tr>
+    <tr><td><code>STANDUP_PHONE</code></td><td>Your number with country code, like <code>+919876543210</code>.</td></tr>
+  </table>
+
+  <h2 id="run">4. Run it</h2>
+  <ol>
+    <li>Open the repo in VS Code and press <b>F5</b>. Choose <b>Run Standup on demo-app</b>.</li>
+    <li>In the new window, open the Command Palette and run <b>Standup: Open Panel</b>.</li>
+    <li>Run <b>Standup: Start a Feature</b>, or press <code>⌘⇧Space</code> to talk.</li>
+  </ol>
+  <p>The first time, macOS asks to let VS Code use the microphone. Allow it.</p>
+
+  <h2 id="bolna">5. Phone calls (Away mode)</h2>
+  <ol>
+    <li><b>Create an agent</b> in the Bolna dashboard. Language: English.</li>
+    <li><b>Prompt.</b> The extension sends <code>agent_name</code>, <code>question</code>, <code>options</code> and <code>decision_id</code>. Use them in double braces:
+<pre><code>You are {{agent_name}}, an AI developer on the user's team. Ask exactly this
+question: {{question}}. The options are: {{options}}. When the user picks
+one, call submit_decision with decision_id {{decision_id}} and the option
+they chose. Then confirm briefly and end the call.</code></pre></li>
+    <li><b>Custom function</b> named <code>submit_decision</code>, method POST, URL <code>https://&lt;your-ngrok-domain&gt;/decision</code>, with string parameters <code>decision_id</code> and <code>choice</code>. The names must match exactly.</li>
+    <li><b>Expose the server</b> the extension runs on port 7777:
+<pre><code>ngrok http 7777 --url=&lt;your-ngrok-domain&gt;
+curl https://&lt;your-ngrok-domain&gt;/health</code></pre></li>
+    <li>Put the agent id and API key in <code>extension/.env</code>.</li>
+  </ol>
+  <div class="callout">On Bolna's trial plan you can only call <b>verified numbers</b>. Verify your own phone number in the dashboard first.</div>
+
+  <h2 id="access">6. Settings</h2>
+  <p>Open Settings (<code>⌘,</code>) and search for Standup, or edit <code>settings.json</code>:</p>
+<pre><code>{
+  "standup.access": "laptop",
+  "standup.phoneNumber": "+919876543210"
+}</code></pre>
+  <ul>
+    <li><code>standup.access</code>: <code>project</code> keeps agents in the repo. <code>laptop</code> lets them do any task on the machine.</li>
+    <li><code>standup.model</code> and <code>standup.leadModel</code>: the models agents use.</li>
+  </ul>
+  <p>Settings from an extension only appear in the window where the extension is loaded, so change them in the window you opened with F5.</p>
+
+  <h2 id="try">7. Your first task</h2>
+  <p><b>At the desk.</b> Open the panel, press <code>⌘⇧Space</code>, and say "Add pagination and search to todos". Watch the team form and talk. When a decision comes, answer by voice, click or type.</p>
+  <p><b>Away.</b> Click <b>Away</b> in the panel (the status bar reads <code>Standup: Away</code>), start a task and step away. When a decision comes up, your phone rings and you answer by talking.</p>
+  <p>To put the demo app back to its start between runs, run <code>demo-app/scripts/reset.sh</code>.</p>
+
+  <h2 id="help">Troubleshooting</h2>
+  <details><summary>The microphone doesn't work</summary><p>Run <code>brew install sox</code> and restart VS Code completely. Allow VS Code in System Settings, Privacy and Security, Microphone.</p></details>
+  <details><summary>Push to talk opens a text box</summary><p><code>DEEPGRAM_API_KEY</code> isn't set. Add it to <code>extension/.env</code> and restart the F5 window.</p></details>
+  <details><summary>No voice from the agents</summary><p>Check that <code>standup.voice</code> isn't <code>off</code> and your volume is up. Without a Cartesia key the agents use macOS voices.</p></details>
+  <details><summary>The phone call never arrives</summary><p>Open View, Output, Standup and look at the phone lines. Usual causes: a missing Bolna key, agent id or phone number, a number that isn't verified on the trial plan, or you're still in Desk mode.</p></details>
+  <details><summary>The call happens but the agent doesn't continue</summary><p>The function didn't reach the server. Confirm ngrok is running, the function URL ends in <code>/decision</code>, and the <code>/health</code> check works. The extension also reads the finished call as a fallback.</p></details>
+  <details><summary>Agents fail to start</summary><p>Run <code>claude</code> once and log in, or set <code>ANTHROPIC_API_KEY</code> in <code>extension/.env</code>.</p></details>
+  <p>The full README has the safety table, every setting and the project layout: <a href="https://github.com/parthdagia05/standup#readme">read it on GitHub</a>.</p>
+</article>
+
+<footer>
+  <div class="wrap"><a href="index.html">Home</a> &nbsp;·&nbsp; <a href="https://github.com/parthdagia05/standup">GitHub</a></div>
+</footer>
+</body>
+</html>

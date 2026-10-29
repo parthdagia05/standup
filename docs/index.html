@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Standup: agents run the build, you make the calls</title>
+<meta name="description" content="A VS Code extension where a team of AI agents builds in parallel, talks out loud, and phones you only when a real decision is needed.">
+<meta property="og:title" content="Standup">
+<meta property="og:description" content="Agents run the build. You make the calls.">
+<meta property="og:image" content="assets/poster.jpg">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><i>●</i> Standup</a>
+    <a class="link" href="#demo">Demo</a>
+    <a class="link" href="#how">How it works</a>
+    <a class="link" href="#safety">Safety</a>
+    <a class="link" href="guide.html">Setup guide</a>
+    <a class="link" href="https://github.com/parthdagia05/standup">GitHub</a>
+  </div>
+</nav>
+
+<header class="hero wrap" id="top">
+  <h1>Agents run the build.<br><span>You make the calls.</span></h1>
+  <p class="lead">Standup is a VS Code extension. A team of AI agents works on your task in parallel, talks to each other out loud, and stops to ask you only when a real decision is needed. At your desk you answer by voice. When you walk away, your laptop phones you.</p>
+  <div class="btns">
+    <a class="btn primary" href="#demo">Watch the demo</a>
+    <a class="btn" href="guide.html">Set it up in 10 minutes</a>
+    <a class="btn" href="https://github.com/parthdagia05/standup">View the code</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="demo" style="padding-top:20px">
+    <div class="video">
+      <video controls preload="metadata" poster="assets/poster.jpg" playsinline>
+        <source src="assets/standup-demo.mp4" type="video/mp4">
+        Your browser can't play this video. <a href="assets/standup-demo.mp4">Download it</a>.
+      </video>
+    </div>
+    <p class="note">About 3 minutes with captions. The demo section is an illustrative replay of the real panel, not a live recording.</p>
+  </section>
+
+  <section>
+    <div class="kicker">What it does</div>
+    <h2>A team, not a chatbot</h2>
+    <p class="sub">Describe a task by typing or speaking. A Lead agent hires only the teammates the task needs, and they get to work.</p>
+    <div class="grid">
+      <div class="card"><h3>Hires the right team</h3><p>The Lead reads the task and hires one to six agents. Each owns its own job, so they don't step on each other.</p></div>
+      <div class="card"><h3>Talks like a standup call</h3><p>Agents speak in their own voices, ask each other questions and negotiate before they build.</p></div>
+      <div class="card"><h3>Asks only real questions</h3><p>Small choices are made for you. A decision router sends you only the forks that matter.</p></div>
+      <div class="card"><h3>Phones you when you're away</h3><p>In Away mode a Bolna voice call reaches you, you answer by talking, and the agents carry on.</p></div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="kicker">How it works</div>
+    <h2>From a sentence to a finished task</h2>
+    <p class="sub">Everything runs inside the VS Code extension host. Agents run on the Claude Agent SDK, and a typed event bus feeds the panel, the voices and the decision router.</p>
+    <div class="flow">
+      <div class="step"><b>1. You ask</b><span>Push to talk. sox records, Deepgram turns it into text.</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><b>2. Lead hires</b><span>One to six teammates, each with a job.</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><b>3. Agents work</b><span>In parallel, talking to each other with say_to and discuss.</span></div>
+      <div class="arrow">→</div>
+      <div class="step"><b>4. Router decides</b><span>At the desk it asks out loud. Away, it calls you.</span></div>
+    </div>
+    <img class="shot" src="assets/panel.jpg" alt="The Standup panel showing the team, a live transcript and the decision log" loading="lazy">
+
+    <h2 style="margin-top:48px">The phone loop</h2>
+    <p class="sub">A Bolna agent asks your question. Its custom function <code>submit_decision</code> posts your answer through an ngrok tunnel to a small server inside the extension. If the function never fires, the extension reads the full call transcript instead.</p>
+    <div class="flow">
+      <div class="step"><b>Bolna call</b><span>Voice agent on your phone</span></div><div class="arrow">→</div>
+      <div class="step"><b>Custom function</b><span>submit_decision</span></div><div class="arrow">→</div>
+      <div class="step"><b>ngrok</b><span>Public tunnel</span></div><div class="arrow">→</div>
+      <div class="step"><b>Local server</b><span>localhost:7777</span></div><div class="arrow">→</div>
+      <div class="step"><b>Router</b><span>Answer received</span></div>
+    </div>
+  </section>
+
+  <section id="modes">
+    <div class="kicker">Two modes</div>
+    <h2>Stay in the repo, or use the whole laptop</h2>
+    <p class="sub">One setting, <code>standup.access</code>, decides how far the agents can reach.</p>
+    <div class="grid">
+      <div class="card"><h3>project (default)</h3><p>Agents stay inside the repo and may only edit the folders they own.</p></div>
+      <div class="card"><h3>laptop</h3><p>Agents can do any task on the machine: files, apps, web research and system settings. Credentials stay blocked and risky actions ask first.</p></div>
+    </div>
+  </section>
+
+  <section id="safety">
+    <div class="kicker">Safety</div>
+    <h2>Enforced in code, not left to the model</h2>
+    <p class="sub">Every tool call passes through a permission check before it runs.</p>
+    <div class="grid">
+      <div class="card ok"><h3>Auto-approved</h3><p>Package installs that pass an npm check: popular, not deprecated, and no install scripts.</p></div>
+      <div class="card warn"><h3>Always asks</h3><p>Deleting files, sudo, git push, curl piped to a shell, database migrations. By phone when you're away.</p></div>
+      <div class="card bad"><h3>Blocked</h3><p>SSH keys, cloud credentials and keychains are never readable or writable, whatever the task.</p></div>
+    </div>
+    <p class="sub" style="margin-top:18px">These are pattern-based checks, not a sandbox. Use laptop mode on a machine you're comfortable experimenting with.</p>
+  </section>
+
+  <section>
+    <div class="kicker">Built with</div>
+    <h2>The stack</h2>
+    <div class="chips">
+      <span class="chip">VS Code extension</span><span class="chip">TypeScript</span><span class="chip">Claude Agent SDK</span>
+      <span class="chip">Deepgram</span><span class="chip">Bolna</span><span class="chip">Cartesia</span><span class="chip">macOS say</span><span class="chip">sox</span><span class="chip">ngrok</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="kicker">What's next</div>
+    <h2>Where it goes from here</h2>
+    <div class="grid">
+      <div class="card"><h3>Distinct voices</h3><p>A Cartesia voice for every agent.</p></div>
+      <div class="card"><h3>Smarter calls</h3><p>More languages, and interrupting the agent mid-call.</p></div>
+      <div class="card"><h3>Safer by design</h3><p>Sandboxed tasks, an undo log and per-folder permissions.</p></div>
+      <div class="card"><h3>More reach</h3><p>Beyond macOS, and approvals by WhatsApp or SMS.</p></div>
+      <div class="card"><h3>Cost and speed</h3><p>Cheaper models for simple agents, the strongest for the Lead.</p></div>
+      <div class="card"><h3>Proof</h3><p>Replay a finished run from a saved log.</p></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    Built for the Bolna buildathon, 2026. &nbsp;·&nbsp;
+    <a href="guide.html">Setup guide</a> &nbsp;·&nbsp;
+    <a href="https://github.com/parthdagia05/standup">Source and README</a>
+  </div>
+</footer>
+</body>
+</html>
