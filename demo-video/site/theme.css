@@ -1,0 +1,17 @@
+/* A dark-teal VS Code theme, so the real panel CSS renders as it does in the editor. */
+:root {
+  --vscode-editor-background: #0f2630;
+  --vscode-editor-foreground: #d6e0e5;
+  --vscode-descriptionForeground: #8ba3ad;
+  --vscode-sideBar-background: #133441;
+  --vscode-panel-border: #25495a;
+  --vscode-button-background: #1f8394;
+  --vscode-button-foreground: #ffffff;
+  --vscode-input-background: #0b1f27;
+  --vscode-input-foreground: #d6e0e5;
+  --vscode-errorForeground: #f26d6d;
+  --vscode-focusBorder: #3fc1c9;
+  --vscode-font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --vscode-editor-font-family: "SF Mono", Menlo, monospace;
+}
+html, body { margin: 0; height: 100%; overflow: hidden; }

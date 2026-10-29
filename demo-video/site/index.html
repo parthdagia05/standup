@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Standup demo</title>
+<link rel="stylesheet" href="/scenes.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#3fc1c9"/></marker>
+  <marker id="ahw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#e0a800"/></marker>
+</defs></svg>
+
+<div id="stage">
+  <div id="chapter"></div>
+  <div id="tag">Illustrative replay</div>
+
+  <!-- 1. Hook: the messy folder -->
+  <section class="scene" id="s1" data-from="0" data-to="8.9">
+    <div class="finder" style="left:300px;top:130px;width:1320px;height:760px">
+      <div class="titlebar"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i><span>kachra</span></div>
+      <div class="fbody"><div class="fside"><b>Favorites</b><p>Desktop</p><p>Documents</p><p>Downloads</p><p>Applications</p></div><div class="fgrid" id="messy"></div></div>
+    </div>
+    <div class="dim" data-at="5.9" data-dur="0.8"></div>
+    <div class="wordmark" data-at="6.3" data-dur="0.9" data-fx="pop">Standup</div>
+    <div class="tagline" data-at="7.2" data-dur="0.8">Agents run the build. You make the calls.</div>
+  </section>
+
+  <!-- 2. The panel, live -->
+  <section class="scene" id="s2" data-from="8.9" data-to="32.0" data-noburn="1">
+    <div class="win" id="win2">
+      <div class="titlebar"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i><span>Standup — kachra</span></div>
+      <div class="vsbody">
+        <div class="actbar"><i></i><i></i><i></i><i></i></div>
+        <div class="vsmain">
+          <div class="tabs"><span class="tab">◉ Standup</span></div>
+          <div class="pwrap"><iframe class="pframe" data-mode="live" data-from="8.0" src="/panel-frame.html?mode=live"></iframe></div>
+        </div>
+      </div>
+      <div class="statusbar"><span class="sb-l">⎇ main</span><span class="sb-r"><b id="sbmode">🎙 Standup: Desk</b></span></div>
+    </div>
+    <div id="phone" class="phone" data-at="27.3" data-dur="0.7" data-until="31.5" data-fx="right">
+      <div class="notch"></div>
+      <div class="ph-ring" data-at="27.5" data-until="28.6" data-fx="none">
+        <div class="avatar big"><span class="rings"></span>S</div>
+        <h3>Standup</h3><p>Bolna voice call · incoming</p>
+        <div class="callbtns"><i class="no">✕</i><i class="yes">✆</i></div>
+      </div>
+      <div class="ph-live" data-at="28.6" data-until="31.3" data-fx="none">
+        <div class="ph-top"><div class="avatar">S</div><div><h4>Standup</h4><p id="timer">00:00</p></div></div>
+        <div class="wave" id="wave"></div>
+        <div class="bub agent" data-at="28.75" data-dur="0.3">Dupes found 3 duplicate files. Delete them?</div>
+        <div class="bub me" data-at="29.3" data-dur="0.3" data-fx="right">Yes. Delete the duplicates.</div>
+        <div class="sent" data-at="30.6" data-dur="0.3" data-fx="pop">✓ Decision sent to your laptop</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. The result -->
+  <section class="scene" id="s3" data-from="32.0" data-to="37.5">
+    <div class="finder" style="left:110px;top:170px;width:780px;height:700px" data-at="32.2" data-dur="0.5">
+      <div class="titlebar"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i><span>kachra</span></div>
+      <div class="flist" id="sorted"></div>
+    </div>
+    <div class="editor" style="left:950px;top:210px;width:860px;height:620px" data-at="32.5" data-dur="0.5">
+      <div class="titlebar"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i><span>roast.txt</span></div>
+      <pre id="roast" data-at="32.9" data-type="1" data-cps="34"></pre>
+    </div>
+  </section>
+
+  <!-- 4. Stack -->
+  <section class="scene" id="s4" data-from="37.5" data-to="45.2">
+    <div class="kicker" data-at="37.6">How it's built</div>
+    <div class="h1" data-at="37.7" style="top:150px">One extension,<br>a few sharp parts.</div>
+    <div class="chip big" style="left:120px;top:520px" data-at="38.4" data-fx="pop">VS Code extension</div>
+    <div class="chip big" style="left:560px;top:520px" data-at="40.0" data-fx="pop">TypeScript</div>
+    <div class="chip big hot" style="left:880px;top:520px" data-at="43.2" data-fx="pop">Claude Agent SDK</div>
+    <div class="sub" style="left:120px;top:690px" data-at="41.6">Here is how it works.</div>
+  </section>
+
+  <!-- 5. Agents -->
+  <section class="scene" id="s5" data-from="45.2" data-to="59.7">
+    <div class="kicker" data-at="45.3">Agents</div>
+    <div class="node" style="left:760px;top:200px;width:400px" data-at="45.4" data-fx="pop">Lead<small>reads the task, hires the team</small></div>
+    <svg class="wires" viewBox="0 0 1920 1080">
+      <path d="M960 330 C960 470 440 460 440 600" pathLength="1" data-at="46.4" data-fx="draw" data-dur="0.9"/>
+      <path d="M960 330 L960 600" pathLength="1" data-at="46.8" data-fx="draw" data-dur="0.9"/>
+      <path d="M960 330 C960 470 1480 460 1480 600" pathLength="1" data-at="47.2" data-fx="draw" data-dur="0.9"/>
+      <path class="warm" d="M640 690 L760 690" pathLength="1" data-at="51.2" data-fx="draw" data-both="1"/>
+      <path class="warm" d="M1160 690 L1280 690" pathLength="1" data-at="52.6" data-fx="draw" data-both="1"/>
+    </svg>
+    <div class="pill" style="left:1180px;top:320px" data-at="48.4">1 to 6 teammates</div>
+    <div class="node" style="left:260px;top:600px;width:360px" data-at="47.0" data-fx="pop">Files<small>owns a job</small></div>
+    <div class="node" style="left:780px;top:600px;width:360px" data-at="47.4" data-fx="pop">Dupes<small>owns a job</small></div>
+    <div class="node" style="left:1300px;top:600px;width:360px" data-at="47.8" data-fx="pop">Roast<small>owns a job</small></div>
+    <div class="mono" style="left:650px;top:625px;width:100px;text-align:center" data-at="51.4">say_to</div>
+    <div class="mono" style="left:1170px;top:625px;width:100px;text-align:center" data-at="52.8">discuss</div>
+    <div class="pill big" style="left:620px;top:840px" data-at="55.6">They negotiate before building</div>
+  </section>
+
+  <!-- 6. Voice -->
+  <section class="scene" id="s6" data-from="59.7" data-to="72.6">
+    <div class="kicker" data-at="59.8">You → agents</div>
+    <div class="node" style="left:150px;top:200px;width:300px" data-at="60.0" data-fx="pop">Push to talk<small>your mic</small></div>
+    <div class="node" style="left:590px;top:200px;width:300px" data-at="61.6" data-fx="pop">sox<small>records audio</small></div>
+    <div class="node" style="left:1030px;top:200px;width:300px" data-at="63.2" data-fx="pop">Deepgram<small>speech to text</small></div>
+    <div class="node" style="left:1470px;top:200px;width:300px" data-at="65.0" data-fx="pop">Agents<small>get your words</small></div>
+    <svg class="wires" viewBox="0 0 1920 1080">
+      <path d="M455 262 L585 262" pathLength="1" data-at="61.2" data-fx="draw"/>
+      <path d="M895 262 L1025 262" pathLength="1" data-at="62.8" data-fx="draw"/>
+      <path d="M1335 262 L1465 262" pathLength="1" data-at="64.6" data-fx="draw"/>
+      <path d="M455 700 L585 700" pathLength="1" data-at="66.0" data-fx="draw"/>
+      <path d="M1335 700 L1465 700" pathLength="1" data-at="69.2" data-fx="draw"/>
+    </svg>
+    <div class="kicker" style="top:520px" data-at="65.6">Agents → you</div>
+    <div class="node" style="left:150px;top:640px;width:300px" data-at="66.0" data-fx="pop">Each agent<small>has its own voice</small></div>
+    <div class="node wide" style="left:590px;top:610px;width:740px;height:200px" data-at="67.4" data-fx="pop">Text to speech
+      <div class="chips"><span class="chip hot" data-at="68.0" data-fx="pop">macOS say · now</span><span class="chip" data-at="70.4" data-fx="pop">Cartesia · built in</span></div></div>
+    <div class="node" style="left:1470px;top:640px;width:300px" data-at="69.4" data-fx="pop">Your speakers<small>a team on a call</small></div>
+  </section>
+
+  <!-- 7. Router -->
+  <section class="scene" id="s7" data-from="72.6" data-to="86.1">
+    <div class="kicker" data-at="72.7">Decisions</div>
+    <div class="node" style="left:110px;top:430px;width:380px" data-at="72.9" data-fx="pop">An agent hits a fork<small>request_decision</small></div>
+    <div class="node big hot" style="left:700px;top:390px;width:520px" data-at="73.6" data-fx="pop">Decision router<small>only real forks reach you</small></div>
+    <svg class="wires" viewBox="0 0 1920 1080">
+      <path d="M495 490 L695 490" pathLength="1" data-at="73.4" data-fx="draw"/>
+      <path d="M1225 470 C1290 470 1260 320 1330 320" pathLength="1" data-at="78.2" data-fx="draw"/>
+      <path class="warm" d="M1225 510 C1290 510 1260 700 1330 700" pathLength="1" data-at="82.4" data-fx="draw"/>
+    </svg>
+    <div class="node" style="left:1335px;top:240px;width:480px" data-at="78.4" data-fx="pop">At your desk<small>asks out loud · you answer by voice or click</small></div>
+    <div class="node warm" style="left:1335px;top:620px;width:480px" data-at="82.6" data-fx="pop">Away<small>places a Bolna phone call</small></div>
+  </section>
+
+  <!-- 8. Phone loop -->
+  <section class="scene" id="s8" data-from="86.1" data-to="98.6">
+    <div class="kicker" data-at="86.2">Away mode</div>
+    <div class="node" style="left:90px;top:300px;width:270px" data-at="86.4" data-fx="pop">Bolna call<small>voice agent</small></div>
+    <div class="node" style="left:450px;top:300px;width:270px" data-at="88.4" data-fx="pop">Custom function<small>submit_decision</small></div>
+    <div class="node" style="left:810px;top:300px;width:270px" data-at="90.6" data-fx="pop">ngrok<small>public tunnel</small></div>
+    <div class="node" style="left:1170px;top:300px;width:270px" data-at="92.0" data-fx="pop">Local server<small>localhost:7777</small></div>
+    <div class="node hot" style="left:1530px;top:300px;width:270px" data-at="92.8" data-fx="pop">Router<small>answer received</small></div>
+    <svg class="wires" viewBox="0 0 1920 1080">
+      <path d="M365 390 L445 390" pathLength="1" data-at="88.0" data-fx="draw"/>
+      <path d="M725 390 L805 390" pathLength="1" data-at="90.2" data-fx="draw"/>
+      <path d="M1085 390 L1165 390" pathLength="1" data-at="91.8" data-fx="draw"/>
+      <path d="M1445 390 L1525 390" pathLength="1" data-at="92.6" data-fx="draw"/>
+      <path class="warm dash" d="M780 720 L1665 720 L1665 495" pathLength="1" data-at="94.6" data-fx="draw" data-dur="1.4"/>
+    </svg>
+    <div class="node warm" style="left:430px;top:650px;width:460px" data-at="93.4" data-fx="pop">Call transcript<small>the fallback if the function doesn't fire</small></div>
+    <div class="pill" style="left:960px;top:760px" data-at="96.2">We read the whole call instead</div>
+  </section>
+
+  <!-- 9. Safety -->
+  <section class="scene" id="s9" data-from="98.6" data-to="119.9">
+    <div class="kicker" data-at="98.7">Safety</div>
+    <div class="node" style="left:90px;top:470px;width:360px" data-at="98.9" data-fx="pop">Every tool call<small>Bash · Write · Read</small></div>
+    <div class="node big hot" style="left:600px;top:400px;width:440px;height:230px" data-at="100.0" data-fx="pop">Permission check<small>enforced in code,<br>not left to the model</small></div>
+    <svg class="wires" viewBox="0 0 1920 1080">
+      <path d="M455 530 L595 530" pathLength="1" data-at="99.6" data-fx="draw"/>
+      <path class="ok" d="M1045 480 C1140 480 1120 270 1200 270" pathLength="1" data-at="103.8" data-fx="draw"/>
+      <path class="warm" d="M1045 515 L1200 515" pathLength="1" data-at="109.4" data-fx="draw"/>
+      <path class="bad" d="M1045 550 C1140 550 1120 770 1200 770" pathLength="1" data-at="113.8" data-fx="draw"/>
+    </svg>
+    <div class="lane ok" style="left:1205px;top:170px" data-at="104.0" data-fx="left"><b>Auto-approved</b>Package installs are checked on npm first, and only bother you if they look risky</div>
+    <div class="lane warm" style="left:1205px;top:415px" data-at="109.6" data-fx="left"><b>Always asks</b>Deleting files · sudo · git push · curl | sh · database migrations</div>
+    <div class="lane bad" style="left:1205px;top:670px" data-at="114.0" data-fx="left"><b>Blocked</b>SSH keys · keychains · cloud credentials, whatever the task</div>
+  </section>
+
+  <!-- 10. Access -->
+  <section class="scene" id="s10" data-from="119.9" data-to="131.6">
+    <div class="kicker" data-at="120.0">One setting</div>
+    <div class="mono big" style="left:120px;top:230px" data-at="120.2">standup.access</div>
+    <div class="toggle" style="left:120px;top:330px" data-at="120.4">
+      <div class="knob" id="knob"></div><span class="t1">project</span><span class="t2">laptop</span>
+    </div>
+    <div class="sub" style="left:120px;top:470px" data-at="120.9">Agents stay in the repo.</div>
+    <div class="sub on" style="left:120px;top:520px" data-at="122.0">Now: any task on the machine.</div>
+    <div class="chip big" style="left:120px;top:700px" data-at="124.4" data-fx="pop">Files</div>
+    <div class="chip big" style="left:380px;top:700px" data-at="127.4" data-fx="pop">Apps</div>
+    <div class="chip big" style="left:640px;top:700px" data-at="128.2" data-fx="pop">Web research</div>
+    <div class="chip big" style="left:1020px;top:700px" data-at="129.6" data-fx="pop">System settings</div>
+  </section>
+
+  <!-- 11. The live panel -->
+  <section class="scene" id="s11" data-from="131.6" data-to="142.3" data-noburn="1">
+    <div class="win" id="win11">
+      <div class="titlebar"><i class="tl r"></i><i class="tl y"></i><i class="tl g"></i><span>Standup — kachra</span></div>
+      <div class="vsbody">
+        <div class="actbar"><i></i><i></i><i></i><i></i></div>
+        <div class="vsmain">
+          <div class="tabs"><span class="tab">◉ Standup</span></div>
+          <div class="pwrap"><iframe class="pframe" data-mode="final" data-from="131.0" src="/panel-frame.html?mode=final"></iframe></div>
+        </div>
+      </div>
+      <div class="statusbar"><span class="sb-l">⎇ main</span><span class="sb-r"><b>📞 Standup: Away</b></span></div>
+    </div>
+    <div class="callout" style="left:330px;top:392px" data-at="131.8" data-until="135.2" data-fx="pop">Each agent's status</div>
+    <div class="callout" style="left:830px;top:590px" data-at="135.4" data-until="140.1" data-fx="pop">Live transcript</div>
+    <div class="callout" style="left:1240px;top:872px" data-at="140.3" data-fx="pop">↑ Decision log: voice · phone · click</div>
+  </section>
+
+  <!-- 12. What's next -->
+  <section class="scene" id="s12" data-from="142.3" data-to="198.7">
+    <div class="kicker" data-at="142.5">What's next</div>
+    <div class="h1" data-at="142.7" style="top:120px">A working prototype.<br>Here's where it goes.</div>
+    <div class="card" style="left:120px;top:380px" data-at="147.2" data-active="147.2,153.0"><b>Distinct voices</b>A Cartesia voice for every agent, so you know who's talking without looking.</div>
+    <div class="card" style="left:690px;top:380px" data-at="153.1" data-active="153.1,163.5"><b>Smarter phone calls</b>More languages, including Hindi and Hinglish, and interrupt the agent mid-call.</div>
+    <div class="card" style="left:1260px;top:380px" data-at="163.6" data-active="163.6,173.3"><b>Safer by design</b>Sandboxed laptop tasks, an undo log for file changes, per-folder permissions.</div>
+    <div class="card" style="left:120px;top:640px" data-at="173.4" data-active="173.4,181.9"><b>More reach</b>Beyond macOS, and approvals by WhatsApp or SMS when a call isn't convenient.</div>
+    <div class="card" style="left:690px;top:640px" data-at="182.0" data-active="182.0,190.3"><b>Cost and speed</b>Cheaper, faster models for simple agents. The strongest model stays with the Lead.</div>
+    <div class="card" style="left:1260px;top:640px" data-at="190.4" data-active="190.4,198.7"><b>Proof</b>Replay a finished run from a saved log, so a team can audit what the agents did.</div>
+  </section>
+
+  <!-- 13. End -->
+  <section class="scene" id="s13" data-from="198.7" data-to="209">
+    <div class="wordmark" data-at="199.0" data-dur="0.9" data-fx="pop" style="top:270px">Standup</div>
+    <div class="tagline" data-at="200.4" style="top:540px">Agents run the build. You make the calls.</div>
+    <div class="builtwith" data-at="204.2" style="top:690px">Built with Bolna · Deepgram · Claude Agent SDK</div>
+    <div class="builtwith dim2" data-at="205.6" style="top:770px">Set it up in ten minutes: see the README</div>
+  </section>
+
+  <div id="cap"></div>
+</div>
+<script src="/events.js"></script>
+<script src="/captions.js"></script>
+<script src="/main.js"></script>
+</body>
+</html>

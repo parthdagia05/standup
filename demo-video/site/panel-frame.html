@@ -1,0 +1,75 @@
+<!doctype html>
+<!-- The real panel (extension/media/panel.css + panel.js) with a stub VS Code API. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/media/panel.css">
+<style>html, body { background: var(--vscode-editor-background); }</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">●</span> Standup <span id="runState" class="run-state">idle</span></div>
+  <div class="controls">
+    <div class="mode" role="group" aria-label="Where are you">
+      <button id="modeDesk" class="seg on">🎙 Desk</button>
+      <button id="modeAway" class="seg">📞 Away</button>
+    </div>
+    <button id="ptt" class="ptt">🎙 Talk <kbd>⌘⇧Space</kbd></button>
+    <button id="stop" class="ghost" disabled>Stop</button>
+  </div>
+</header>
+
+<form id="startForm" class="start">
+  <input id="feature" placeholder="Say or type a task, e.g. Add search to todos, or tidy my Downloads folder" autocomplete="off">
+  <button id="startBtn" type="submit">Start</button>
+</form>
+
+<section id="cards" class="cards"></section>
+
+<main class="grid">
+  <section class="col">
+    <h2>Transcript</h2>
+    <div id="transcript" class="transcript"><p class="empty">Nothing yet. Start a feature to hear the team.</p></div>
+  </section>
+  <section class="col">
+    <h2>Decisions <span id="pendingCount" class="count"></span></h2>
+    <div id="decisions" class="decisions"><p class="empty">The team will ask you here only when it matters.</p></div>
+    <h2 class="sub">Status</h2>
+    <ul id="status" class="status"></ul>
+  </section>
+</main>
+<script src="/events.js"></script>
+<script>
+  window.acquireVsCodeApi = () => ({ postMessage() {} });
+  const send = (data) => window.dispatchEvent(new MessageEvent("message", { data }));
+  const mode = new URLSearchParams(location.search).get("mode") || "live";
+  let next = 0;
+  let started = false;
+
+  // Steps CSS animations and transitions on the video clock instead of real time.
+  function stepAnimations(t) {
+    for (const a of document.getAnimations()) {
+      if (a.__t0 === undefined) { a.__t0 = t; a.pause(); }
+      a.currentTime = Math.max(0, (t - a.__t0) * 1000);
+    }
+  }
+
+  // "live": plays EVENTS as the clock passes them. "final": jumps to the end state, as a reopened panel would.
+  window.__advance = (t) => {
+    if (mode === "final") {
+      if (!started) {
+        started = true;
+        const history = EVENTS.filter((e) => e.msg.type === "event").map((e) => e.msg.event);
+        send({ type: "init", agents: TEAM, mode: "away", status: STATUS, history });
+      }
+    } else {
+      while (next < EVENTS.length && EVENTS[next].t <= t) send(EVENTS[next++].msg);
+    }
+    stepAnimations(t);
+  };
+  window.__ready = true;
+</script>
+<script src="/media/panel.js"></script>
+</body>
+</html>

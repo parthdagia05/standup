@@ -1,0 +1,8 @@
+{
+  "name": "standup-demo-video",
+  "private": true,
+  "type": "module",
+  "description": "Renders the Standup demo video: a replay of the real panel plus architecture scenes, synced to a voice track.",
+  "scripts": { "render": "node build.mjs" },
+  "dependencies": { "playwright": "1.49.1" }
+}
