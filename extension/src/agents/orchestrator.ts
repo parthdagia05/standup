@@ -13,6 +13,7 @@ import { buildTools, HireSpec, TeamContext } from "./tools";
 
 const READ_TOOLS = ["Read", "Grep", "Glob"];
 const WORKER_TOOLS = [...READ_TOOLS, "Write", "Edit", "Bash"];
+const LAPTOP_TOOLS = [...WORKER_TOOLS, "WebSearch", "WebFetch"];
 const MAX_TEAMMATE_REQUESTS = 3;
 const RESERVED_IDS = new Set(["lead", "team", "you", "developer"]);
 
@@ -53,7 +54,7 @@ export class Orchestrator implements TeamContext {
     let summary: string | undefined;
     try {
       this.sdk = await loadSdk();
-      await this.runAgent("lead", `The developer wants: "${feature}". Work through your instructions: understand the repo, ask your one question, hire the team, kick them off.`);
+      await this.runAgent("lead", `The developer wants: "${feature}". Work through your instructions: understand the task, ask at most one question, hire the team, kick them off.`);
       if (team.workers().length === 0) {
         speech.say("lead", "I couldn't put a team together for that one. Try describing the feature a bit differently?", true);
         ok = false;
@@ -88,7 +89,7 @@ export class Orchestrator implements TeamContext {
 
   formTeam(specs: HireSpec[]): string | null {
     if (team.workers().length) return "The team is already hired.";
-    const error = validateTeam(specs, this.repo);
+    const error = validateTeam(specs, this.repo, config.laptop());
     if (error) return error;
 
     const ids = new Set<string>();
@@ -97,7 +98,7 @@ export class Orchestrator implements TeamContext {
       let after = (s.after ?? []).map((a) => a.toLowerCase()).filter((a) => ids.has(a));
       if (s.kind === "tests" && after.length === 0) after = [...ids].filter((id) => specs.find((x) => x.id.toLowerCase() === id)?.kind !== "tests");
       // .standup is shared scratch space; nobody needs to own it.
-      const owns = s.owns.map(normalizeOwn).filter((p) => p !== ".standup");
+      const owns = config.laptop() ? ["."] : s.owns.map(normalizeOwn).filter((p) => p !== ".standup");
       const spec = { ...s, id: s.id.toLowerCase(), owns: owns.length ? owns : s.owns.map(normalizeOwn), after };
       ids.add(spec.id);
       return spec;
@@ -246,12 +247,12 @@ export class Orchestrator implements TeamContext {
         cwd: this.repo,
         model: isLead ? config.leadModel() : config.model(),
         effort: isLead ? "medium" : "low",
-        systemPrompt: { type: "preset", preset: "claude_code", append: isLead ? leadPrompt() : workerPrompt(member) },
-        tools: isLead ? READ_TOOLS : WORKER_TOOLS,
+        systemPrompt: { type: "preset", preset: "claude_code", append: isLead ? leadPrompt(config.laptop()) : workerPrompt(member, config.laptop()) },
+        tools: isLead ? READ_TOOLS : config.laptop() ? LAPTOP_TOOLS : WORKER_TOOLS,
         // Built-in tools all go through canUseTool so reads outside the repo get caught.
         allowedTools: names,
         mcpServers: { standup: server },
-        canUseTool: permissionsFor(agent, this.repo),
+        canUseTool: permissionsFor(agent, this.repo, config.laptop()),
         permissionMode: "default",
         settingSources: [],
         maxTurns: isLead ? 20 : 60,
@@ -346,7 +347,7 @@ function normalizeOwn(p: string): string {
 }
 
 /** Returns a message the Lead can act on, or null when the team is valid. */
-function validateTeam(specs: HireSpec[], repo: string): string | null {
+function validateTeam(specs: HireSpec[], repo: string, laptop: boolean): string | null {
   const ids = new Set<string>();
   const labels = new Set<string>();
   const claims: { id: string; path: string }[] = [];
@@ -357,6 +358,7 @@ function validateTeam(specs: HireSpec[], repo: string): string | null {
     if (labels.has(s.label.toLowerCase())) return `Two teammates are called ${s.label}.`;
     ids.add(id);
     labels.add(s.label.toLowerCase());
+    if (laptop) continue; // operators aren't fenced to folders
     for (const raw of s.owns) {
       const p = normalizeOwn(raw);
       if (path.isAbsolute(p) || p.split("/").includes("..")) return `${s.label} can only own paths inside the repo, not "${raw}".`;

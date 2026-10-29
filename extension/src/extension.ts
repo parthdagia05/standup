@@ -46,6 +46,7 @@ export function activate(context: vscode.ExtensionContext): void {
     Mic: micStatus(),
     Phone: phoneConfigured().ok ? `calls ${config.phoneNumber()}` : `not set up (${phoneConfigured().why})`,
     Server: `localhost:${config.serverPort()}`,
+    Access: config.laptop() ? "laptop (any task)" : "project only",
     Repo: config.repoPath() ?? "missing: open demo-app",
   });
 

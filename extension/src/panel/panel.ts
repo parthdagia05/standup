@@ -105,7 +105,7 @@ export class StandupPanel {
 </header>
 
 <form id="startForm" class="start">
-  <input id="feature" placeholder="Say or type a feature, e.g. Add pagination and search to todos" autocomplete="off">
+  <input id="feature" placeholder="Say or type a task, e.g. Add search to todos, or tidy my Downloads folder" autocomplete="off">
   <button id="startBtn" type="submit">Start</button>
 </form>
 
