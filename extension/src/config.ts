@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
@@ -29,8 +30,11 @@ export const config = {
   repoPath(): string | undefined {
     const configured = setting("repoPath", "");
     if (configured) return configured;
-    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? (config.laptop() ? os.homedir() : undefined);
   },
+  /** "project": agents stay in the repo. "laptop": any task, anywhere on this machine. */
+  access: () => setting<"project" | "laptop">("access", "project"),
+  laptop: () => setting<"project" | "laptop">("access", "project") === "laptop",
   model: () => setting("model", "claude-sonnet-5-5"),
   leadModel: () => setting("leadModel", "claude-sonnet-5-5"),
   parseModel: () => setting("parseModel", "claude-haiku-5-5"),

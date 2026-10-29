@@ -114,7 +114,7 @@ export function buildTools(sdk: typeof Sdk, agent: AgentName, ctx: TeamContext) 
                 label: z.string().describe('One-word spoken name, e.g. "API", "Web", "DB", "Tests"'),
                 kind: z.enum(WORKER_KINDS),
                 role: z.string().describe("One sentence: what this teammate is responsible for"),
-                owns: z.array(z.string()).min(1).describe('Repo-relative folders or files this teammate may edit, e.g. ["backend"]. Use ["."] only for a single fullstack teammate.'),
+                owns: z.array(z.string()).default([]).describe('Repo-relative folders or files this teammate may edit, e.g. ["backend"]. Use ["."] only for a single fullstack teammate. In laptop mode leave empty: operators may work anywhere.'),
                 task: z.string().describe("2-3 sentences in product terms, including the developer's answer"),
                 after: z.array(z.string()).default([]).describe("Ids of teammates that must finish first (usually only for tests)"),
               }),

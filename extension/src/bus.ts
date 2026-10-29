@@ -3,8 +3,8 @@ import { EventEmitter } from "node:events";
 /** "lead", or an id the Lead chose when hiring ("api", "web", "db", "tests"…). */
 export type AgentName = string;
 
-export type MemberKind = "lead" | "frontend" | "backend" | "database" | "tests" | "mobile" | "infra" | "docs" | "fullstack" | "other";
-export const WORKER_KINDS = ["frontend", "backend", "database", "tests", "mobile", "infra", "docs", "fullstack", "other"] as const;
+export type MemberKind = "lead" | "frontend" | "backend" | "database" | "tests" | "mobile" | "infra" | "docs" | "fullstack" | "operator" | "other";
+export const WORKER_KINDS = ["frontend", "backend", "database", "tests", "mobile", "infra", "docs", "fullstack", "operator", "other"] as const;
 
 export interface MemberInfo {
   id: AgentName;

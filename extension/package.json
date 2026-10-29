@@ -54,6 +54,15 @@
           "default": "",
           "description": "Repo the agents work on. Empty means the first workspace folder."
         },
+        "standup.access": {
+          "type": "string",
+          "enum": [
+            "project",
+            "laptop"
+          ],
+          "default": "project",
+          "description": "project: agents only work inside the repo. laptop: agents can do any task on this machine (files, apps, browser, system), and phone you for risky steps when you're away."
+        },
         "standup.model": {
           "type": "string",
           "default": "claude-sonnet-5-5",
