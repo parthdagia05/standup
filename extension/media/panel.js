@@ -11,12 +11,18 @@ const files = {};
 const statuses = {};
 
 const VIA = { voice: "🎙 voice", phone: "📞 phone", click: "🖱 click" };
+const EMPTY = {
+  cards: "The lead hires a team that fits your repo as soon as you start a feature.",
+  transcript: "Nothing yet. Start a feature to hear the team.",
+  decisions: "The team will ask you here only when it matters.",
+};
 
 window.addEventListener("message", ({ data }) => {
   if (data.type === "init") {
     agents = Object.fromEntries(data.agents.map((a) => [a.id, a]));
     renderCards();
     setMode(data.mode);
+    setRunning(false);
     renderStatus(data.status);
     for (const e of data.history) handle(e, true);
   } else if (data.type === "event") handle(data.event, false);
@@ -64,14 +70,12 @@ function handle(e, replay) {
       renderCards();
       break;
     case "run.started":
-      if (!replay) resetRun();
-      $("runState").textContent = "running";
-      $("runState").classList.add("live");
+      resetRun();
+      setRunning(true);
       line("you", e.feature, "you");
       break;
     case "run.finished":
-      $("runState").textContent = e.ok ? "done" : "stopped";
-      $("runState").classList.remove("live");
+      setRunning(false, e.ok ? "done" : "stopped");
       break;
     case "log":
       if (e.level !== "info") line("sys", e.text, "sys");
@@ -86,8 +90,24 @@ function color(agent) {
   return agents[agent]?.color ?? "var(--fg)";
 }
 
+function setEmpty(id) {
+  const p = document.createElement("p");
+  p.className = "empty";
+  p.textContent = EMPTY[id];
+  $(id).replaceChildren(p);
+}
+
+function setRunning(on, final = "idle") {
+  const state = $("runState");
+  state.textContent = on ? "running" : final;
+  state.className = `run-state ${on ? "live" : final}`;
+  $("stop").disabled = !on;
+  /** @type {HTMLButtonElement} */ ($("startBtn")).disabled = on;
+}
+
 function renderCards() {
   $("cards").innerHTML = "";
+  if (!Object.keys(agents).length) setEmpty("cards");
   for (const a of Object.values(agents)) {
     const card = document.createElement("div");
     card.className = "card";
@@ -132,6 +152,7 @@ function appendFile(c, path) {
 function line(who, text, kind = "") {
   const t = $("transcript");
   t.querySelector(".empty")?.remove();
+  const stick = t.scrollHeight - t.scrollTop - t.clientHeight < 40;
   const row = document.createElement("div");
   row.className = `line ${kind}`;
   row.style.setProperty("--c", who === "you" ? "var(--fg)" : color(who));
@@ -143,7 +164,7 @@ function line(who, text, kind = "") {
   x.textContent = text;
   row.append(w, x);
   t.appendChild(row);
-  t.scrollTop = t.scrollHeight;
+  if (stick) t.scrollTop = t.scrollHeight;
 }
 
 function addDecision(e) {
@@ -183,11 +204,14 @@ function answerDecision(e) {
 function updateCount() {
   const n = Object.values(decisions).filter((d) => !d.done).length;
   $("pendingCount").textContent = n ? String(n) : "";
+  document.title = n ? `Standup (${n})` : "Standup";
 }
 
 function setMode(mode) {
-  $("modeDesk").classList.toggle("on", mode === "desk");
-  $("modeAway").classList.toggle("on", mode === "away");
+  for (const [id, m] of [["modeDesk", "desk"], ["modeAway", "away"]]) {
+    $(id).classList.toggle("on", mode === m);
+    $(id).setAttribute("aria-pressed", String(mode === m));
+  }
 }
 
 function renderStatus(status) {
@@ -204,8 +228,8 @@ function renderStatus(status) {
 }
 
 function resetRun() {
-  $("transcript").innerHTML = "";
-  $("decisions").innerHTML = "";
+  setEmpty("transcript");
+  setEmpty("decisions");
   for (const k of Object.keys(decisions)) delete decisions[k];
   for (const k of Object.keys(files)) delete files[k];
   for (const k of Object.keys(statuses)) delete statuses[k];

@@ -100,13 +100,13 @@ export class StandupPanel {
       <button id="modeAway" class="seg" title="Decisions come as a phone call">📞 Away</button>
     </div>
     <button id="ptt" class="ptt" title="Push to talk (⌘⇧Space)">🎙 Talk <kbd>⌘⇧Space</kbd></button>
-    <button id="stop" class="ghost" title="Stop all agents">Stop</button>
+    <button id="stop" class="ghost" title="Stop all agents" disabled>Stop</button>
   </div>
 </header>
 
 <form id="startForm" class="start">
   <input id="feature" placeholder="Say or type a feature, e.g. Add pagination and search to todos" autocomplete="off">
-  <button type="submit">Start</button>
+  <button id="startBtn" type="submit">Start</button>
 </form>
 
 <section id="cards" class="cards"></section>
@@ -114,7 +114,7 @@ export class StandupPanel {
 <main class="grid">
   <section class="col">
     <h2>Transcript</h2>
-    <div id="transcript" class="transcript"><p class="empty">Nothing yet. Start a feature to hear the team.</p></div>
+    <div id="transcript" class="transcript" aria-live="polite"><p class="empty">Nothing yet. Start a feature to hear the team.</p></div>
   </section>
   <section class="col">
     <h2>Decisions <span id="pendingCount" class="count"></span></h2>
