@@ -123,7 +123,7 @@ export class Orchestrator implements TeamContext {
     this.contracts.push(`From ${agentLabel(from)}:\n${contract}`);
     const file = path.join(this.repo, ".standup", "contracts.md");
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.appendFileSync(file, `\n## ${new Date().toLocaleTimeString()} — from ${agentLabel(from)}\n\n${contract}\n`);
+    fs.appendFileSync(file, `\n## ${new Date().toLocaleTimeString()} from ${agentLabel(from)}\n\n${contract}\n`);
     bus.emit({ type: "agent.message", from, to: "team", text: `Contract: ${contract}` });
     bus.emit({ type: "file.changed", agent: from, path: ".standup/contracts.md" });
     const all = this.contracts.join("\n\n");

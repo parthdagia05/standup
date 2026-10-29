@@ -1,4 +1,4 @@
-# Standup — Roadmap
+# Standup: Roadmap
 
 > **Agents run the build. You make the calls.**
 > A VS Code extension where your codebase's folders are voice agents. They build features in parallel, talk to each other out loud, and stop to ask you, by voice in the editor or by phone call, only when a real decision is needed.
@@ -11,7 +11,7 @@
 
 - Work through the phases **in order**. Every phase has a **Done when** check. Don't start the next phase until that check passes.
 - Every phase also has an **If stuck** fallback. If you've been blocked for more than 2 hours, take the fallback and move on. A working demo beats a perfect design.
-- **Cut line:** Phases 1–4 are the minimum product you can submit. Phases 5–7 add the wow factor. Phase 8 is the submission and isn't optional.
+- **Cut line:** Phases 1-4 are the minimum product you can submit. Phases 5-7 add the wow factor. Phase 8 is the submission and isn't optional.
 
 ---
 
@@ -82,7 +82,7 @@ voiceCoding/
 │   │   │   ├── router.ts      # desk vs away
 │   │   │   ├── parse.ts       # "the first one" → option index
 │   │   │   └── phone.ts       # Bolna call + waiting for answer
-│   │   ├── server.ts          # :7777 — /decision endpoint for Bolna
+│   │   ├── server.ts          # :7777, /decision endpoint for Bolna
 │   │   └── panel/             # webview UI (plain HTML/JS is fine)
 │   └── tsconfig.json
 ├── demo-app/                  # the repo we demo on
@@ -105,7 +105,7 @@ type AgentName = "lead" | "frontend" | "backend" | "tests";
 
 ---
 
-## 2. Phase 0 — Accounts and setup (Oct 21, today, about 2h)
+## 2. Phase 0: Accounts and setup (Oct 21, today, about 2h)
 
 Do this first. Account approvals and phone-number verification are the most likely thing to block you without warning.
 
@@ -123,7 +123,7 @@ Do this first. Account approvals and phone-number verification are the most like
 
 ---
 
-## 3. Phase 1 — Agents work in text (Oct 22–23)
+## 3. Phase 1: Agents work in text (Oct 22-23)
 
 Goal: no voice yet. Prove the multi-agent core works on the demo repo.
 
@@ -135,7 +135,7 @@ Goal: no voice yet. Prove the multi-agent core works on the demo repo.
    - `speak({ text })` emits a `speak` event and returns `"ok"`. Log it to the Output channel for now.
    - `request_decision({ question, options })` emits `decision.requested` and **returns a Promise** that resolves on the matching `decision.answered`. For now, answer with a VS Code `showQuickPick`.
 5. `orchestrator.ts`:
-   - The **lead agent** gets the feature request and **does not write code**. It breaks the work into 1–3 tasks, one per folder, and calls `assign_task(agent, task)`.
+   - The **lead agent** gets the feature request and **does not write code**. It breaks the work into 1-3 tasks, one per folder, and calls `assign_task(agent, task)`.
    - Each **folder agent** is its own `query()` with `cwd` set to the repo root and a prompt like: *"You own `backend/`. Narrate with `speak` in at most 1 sentence. Ask with `request_decision` before any choice a senior dev would want a say in."*
    - Run the folder agents **concurrently** (`Promise.all`).
 6. `hooks.ts`: `PreToolUse`
@@ -151,7 +151,7 @@ Goal: no voice yet. Prove the multi-agent core works on the demo repo.
 
 ---
 
-## 4. Phase 2 — Agents speak (Oct 24)
+## 4. Phase 2: Agents speak (Oct 24)
 
 **Tasks**
 1. `tts.ts`: a Cartesia streaming TTS client that outputs raw PCM and pipes it to `play -t raw -r 24000 -e signed -b 16 -c 1 -`.
@@ -164,7 +164,7 @@ Goal: no voice yet. Prove the multi-agent core works on the demo repo.
 
 ---
 
-## 5. Phase 3 — You speak back (Oct 25)
+## 5. Phase 3: You speak back (Oct 25)
 
 **Tasks**
 1. `mic.ts`: spawn `rec -q -t raw -r 16000 -e signed -b 16 -c 1 -` and stream stdout to Deepgram's live WebSocket (`encoding=linear16&sample_rate=16000&model=nova-3&smart_format=true`).
@@ -172,7 +172,7 @@ Goal: no voice yet. Prove the multi-agent core works on the demo repo.
 3. Route each final transcript:
    - If a decision is pending → `parse.ts` turns "the first one", "go with Zod" or "yes" into an option. Do it with a quick `claude-haiku-5-5` call: *"Options: [...]. User said: '...'. Return the option string or NONE."* If it returns NONE, re-ask.
    - Otherwise → send it as a new instruction to the lead agent.
-4. **Kickoff conversation**: the lead agent asks 1–2 clarifying questions out loud *before* it assigns tasks (and "doesn't plan everything").
+4. **Kickoff conversation**: the lead agent asks 1-2 clarifying questions out loud *before* it assigns tasks (and "doesn't plan everything").
 
 **Done when:** You run the whole flow hands-free. You say the feature, the lead asks a question, you answer, the agents build, a decision comes up, you say "the second one", and the work continues.
 **If stuck**
@@ -181,7 +181,7 @@ Goal: no voice yet. Prove the multi-agent core works on the demo repo.
 
 ---
 
-## 6. Phase 4 — Panel UI (Oct 26)
+## 6. Phase 4: Panel UI (Oct 26)
 
 Judges will be watching your screen while they listen, so the screen needs to show what's happening.
 
@@ -198,7 +198,7 @@ Judges will be watching your screen while they listen, so the screen needs to sh
 
 ---
 
-## 7. Phase 5 — Your codebase calls you (Oct 27–28)
+## 7. Phase 5: Your codebase calls you (Oct 27-28)
 
 This is the most memorable part of the demo. Give it two days, because phone integrations always surprise you.
 
@@ -225,7 +225,7 @@ This is the most memorable part of the demo. Give it two days, because phone int
 
 ---
 
-## 8. Phase 6 — Agents argue out loud (Oct 29, morning)
+## 8. Phase 6: Agents argue out loud (Oct 29, morning)
 
 **Tasks**
 1. `message_agent(to, text)` tool: the orchestrator delivers it as the next user message in the target agent's `query()` stream (use streaming input mode, where `prompt` is an `AsyncIterable`).
@@ -237,7 +237,7 @@ This is the most memorable part of the demo. Give it two days, because phone int
 
 ---
 
-## 9. Phase 7 — Polish and stretch goals (Oct 29 afternoon)
+## 9. Phase 7: Polish and stretch goals (Oct 29 afternoon)
 
 Pick at most two:
 - [ ] **Barge-in**: start talking (push-to-talk) to interrupt any agent mid-sentence
@@ -248,7 +248,7 @@ Pick at most two:
 
 ---
 
-## 10. Phase 8 — Demo and submission (Oct 30–31)
+## 10. Phase 8: Demo and submission (Oct 30-31)
 
 ### Demo script (target 2:30)
 1. **(0:00) Hook.** "AI coding agents either make every decision without you, or make you babysit them. Standup gives every folder a voice and only asks you about real decisions."
