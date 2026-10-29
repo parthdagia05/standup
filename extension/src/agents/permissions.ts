@@ -23,6 +23,19 @@ const ALWAYS_ASK: [RegExp, DecisionReason, string][] = [
   [/\b(npm|pnpm|yarn)\s+(i|install|add)\s+(-g|--global)\b/, "access", "install a package globally on your laptop"],
 ];
 
+/** Extra checks in laptop mode, where agents can reach the whole machine. */
+const LAPTOP_ASK: [RegExp, DecisionReason, string][] = [
+  [/\b(shutdown|reboot|halt)\b|\bosascript\b[^\n]*\b(restart|shut down|log out)\b/i, "destructive", "restart or shut down your laptop"],
+  [/\b(killall|pkill)\b/, "destructive", "force-quit programs"],
+  [/\b(diskutil\s+(erase|partition|apfs\s+delete)|mkfs|dd\s+if=)/, "destructive", "erase or format a disk"],
+  [/\b(defaults\s+(delete|write)|launchctl|networksetup|pmset|scutil|csrutil|spctl|dscl)\b/, "access", "change system settings"],
+  [/\b(mail|sendmail|msmtp)\b|\bosascript\b[^\n]*\b(Mail|Messages|send)\b/i, "access", "send a message or email"],
+  [/\bsecurity\s+(find|dump|export|add)-/, "access", "touch the keychain"],
+];
+
+/** Never readable or writable, even in laptop mode: credentials. */
+const SECRET_PATHS = [".ssh", ".aws", ".gnupg", "Library/Keychains", ".config/gcloud", ".kube", ".netrc"];
+
 /** System locations that are fine to touch (binaries, temp files). */
 const HARMLESS_PREFIXES = ["/dev/null", "/tmp", "/private/tmp", "/private/var/folders", "/usr/", "/bin/", "/opt/homebrew/", "/System/", "/Library/Developer/"];
 
@@ -33,7 +46,7 @@ const HARMLESS_PREFIXES = ["/dev/null", "/tmp", "/private/tmp", "/private/var/fo
  * - package installs are checked on npm and only ask when they look risky;
  * - destructive or privileged commands always ask.
  */
-export function permissionsFor(agent: AgentName, repoRoot: string): CanUseTool {
+export function permissionsFor(agent: AgentName, repoRoot: string, laptop = false): CanUseTool {
   const repo = path.resolve(repoRoot);
   const inRepo = (abs: string) => abs === repo || abs.startsWith(repo + path.sep);
 
@@ -42,7 +55,22 @@ export function permissionsFor(agent: AgentName, repoRoot: string): CanUseTool {
     return choice.startsWith("Yes");
   };
 
+  const secretPath = (abs: string) => SECRET_PATHS.some((p) => abs.startsWith(path.join(os.homedir(), p) + path.sep) || abs === path.join(os.homedir(), p));
+  /** Places a laptop-mode agent shouldn't change without asking. */
+  const sensitive = (abs: string) => ["/System", "/Library", "/etc", "/usr", "/bin", "/sbin", path.join(os.homedir(), "Library"), path.join(os.homedir(), ".zshrc"), path.join(os.homedir(), ".bashrc"), path.join(os.homedir(), ".zprofile")].some((d) => abs === d || abs.startsWith(d + path.sep));
+
   return async (toolName, input): Promise<PermissionResult> => {
+    if (laptop && (WRITE_TOOLS.has(toolName) || READ_TOOLS.has(toolName))) {
+      const raw = input.file_path ?? input.notebook_path ?? input.path;
+      const abs = resolve(repo, String(raw ?? ""));
+      if (agent === "lead" && WRITE_TOOLS.has(toolName)) return deny("The lead plans and assigns; it never edits files.");
+      if (raw && secretPath(abs)) return deny("Credential folders are off limits, whatever the task.");
+      if (raw && WRITE_TOOLS.has(toolName) && sensitive(abs) && !harmless(abs)) {
+        return (await askAccess(`change ${display(repo, abs)}, a system or settings location`)) ? allow(input) : deny("The developer said no to changing that location.");
+      }
+      return allow(input);
+    }
+
     if (WRITE_TOOLS.has(toolName)) {
       if (agent === "lead") return deny("The lead plans and assigns; it never edits files.");
       const abs = resolve(repo, String(input.file_path ?? input.notebook_path ?? ""));
@@ -95,6 +123,17 @@ export function permissionsFor(agent: AgentName, repoRoot: string): CanUseTool {
         }
       }
 
+      if (laptop) {
+        const bad = command.match(new RegExp(`(?:~|\\$HOME|${os.homedir().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})/(?:${SECRET_PATHS.map((p) => p.replace(/[.]/g, "\\.")).join("|")})\\b`));
+        if (bad) return deny("Credential folders are off limits, whatever the task.");
+        for (const [re, reason, what] of LAPTOP_ASK) {
+          const m = command.match(re);
+          if (!m) continue;
+          const part = command.split(/&&|;|\n/).find((p) => re.test(p))?.trim() ?? m[0];
+          if (!(await askAccess(`${what}: ${spoken(part)}`, reason))) return deny(`The developer said no to \`${part}\`. Find another way without it, and don't retry.`);
+        }
+        return allow(input);
+      }
       const outside = outsidePaths(command, repo);
       if (outside.length) {
         const ok = await askAccess(`access ${outside.slice(0, 2).map((p) => display(repo, p)).join(" and ")}, outside the project`);
