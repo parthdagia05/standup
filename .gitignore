@@ -1,5 +1,3 @@
 node_modules/
 .DS_Store
 .env
-# demo-app has its own git repo (scripts/reset.sh depends on it)
-demo-app/

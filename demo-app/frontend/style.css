@@ -1,0 +1,9 @@
+body { font-family: system-ui, sans-serif; background: #f6f6f4; margin: 0; }
+main { max-width: 520px; margin: 48px auto; padding: 0 16px; }
+form { display: flex; gap: 8px; margin-bottom: 16px; }
+input { flex: 1; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; }
+button { padding: 8px 14px; border: 0; border-radius: 6px; background: #222; color: #fff; cursor: pointer; }
+ul { list-style: none; padding: 0; }
+li { background: #fff; padding: 10px 12px; margin-bottom: 6px; border-radius: 6px; }
+li.done { text-decoration: line-through; color: #999; }
+nav { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
